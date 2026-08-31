@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/gangcaiyoule/ai-speak/server/internal/identity"
 	"log"
 	"net/http"
 	"os"
@@ -23,6 +24,7 @@ func healthHandler(writer http.ResponseWriter, _ *http.Request) {
 func buildRouter() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
+	identity.NewHTTPHandler(identity.StubAuthService{}).RegisterRoutes(mux)
 	return mux
 }
 
