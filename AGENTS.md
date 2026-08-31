@@ -1,7 +1,7 @@
 # AGENTS.md
 
 - 主仓库为 `https://github.com/gangcaiyoule/ai-speak.git`，`origin` 指向该仓库；所有开发分支从最新 `origin/main` 创建，禁止直接向 `main` 推送，必须通过 Pull Request 合并。
-- 每项改动先创建范围单一、验收清楚的 Issue；一个 Issue 对应一个短分支和一个 Pull Request，PR 目标分支固定为 `main`。
+- 每项改动先创建范围单一、验收清楚且关联当前 Milestone 的 Issue；一个 Issue 对应一个短分支和一个 Pull Request，PR 目标分支固定为 `main`。
 - 分支命名使用 `feature/<issue>-<description>`、`fix/<issue>-<description>`、`docs/<issue>-<description>`、`refactor/<issue>-<description>` 等格式。
 - 保留用户未提交的代码；工作区不干净或存在并行任务时使用独立 worktree，不得覆盖、删除或重置其他任务的修改。
 - 只修改当前 Issue 范围，优先复用现有实现，不提交密钥、Token、密码、`.env`、缓存、日志、构建产物或无关文件。
