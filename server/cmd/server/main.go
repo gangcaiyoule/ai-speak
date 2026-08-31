@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/gangcaiyoule/ai-speak/server/internal/agent"
+	"github.com/gangcaiyoule/ai-speak/server/internal/coaching"
 	"github.com/gangcaiyoule/ai-speak/server/internal/identity"
 	"log"
 	"net/http"
@@ -27,6 +28,7 @@ func buildRouter() http.Handler {
 	mux.HandleFunc("GET /health", healthHandler)
 	identity.NewHTTPHandler(identity.StubAuthService{}).RegisterRoutes(mux)
 	agent.NewHTTPHandler(agent.StubService{}).RegisterRoutes(mux)
+	coaching.NewHTTPHandler().RegisterRoutes(mux)
 	return mux
 }
 
