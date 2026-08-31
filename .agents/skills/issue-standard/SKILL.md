@@ -1,44 +1,44 @@
 ---
 name: issue-standard
-description: Create, split, edit, or audit GitHub Issues for this repository when work requires issue scope, acceptance criteria, title prefixes, duplicate checks, labels, or milestone assignment and verification.
+description: 当任务需要确定 Issue 范围、验收标准、标题类型、重复检查、标签或 Milestone 关联与验证时，为本仓库创建、拆分、修改或检查 GitHub Issue。
 ---
 
-# Issue Standard
+# Issue 规范
 
-Create one independently deliverable and verifiable Issue for each change. Inspect the target repository's current GitHub state before creating or changing anything, and preserve existing conventions unless this skill states a project requirement.
+为每项改动创建一个可以独立交付和验证的 Issue。在创建或修改 Issue 前，先检查目标仓库当前的 GitHub 状态；除非本 Skill 明确规定，否则沿用仓库现有约定。
 
-## Authorization And Scope
+## 授权与范围
 
-- Use this skill when the user asks to create, split, edit, or audit an Issue, or when an authorized repository change must begin with an Issue under `AGENTS.md`.
-- Read-only questions, explanations, reviews, and diagnostics do not create an Issue unless the user also authorizes a change.
-- Do not create branches, commits, Pull Requests, labels, Milestones, or releases as part of this skill unless separately authorized and governed by the repository workflow.
-- Do not batch-edit unrelated or historical Issues.
+- 当用户要求创建、拆分、修改或检查 Issue，或者根据 `AGENTS.md` 授权的仓库改动必须从 Issue 开始时，使用本 Skill。
+- 用户只要求解释、Review、报告状态或只读诊断时，除非用户同时授权改动，否则不要创建 Issue。
+- 本 Skill 不负责创建分支、Commit、Pull Request、标签、Milestone 或 Release；这些操作必须获得单独授权，并遵守仓库对应的工作流规则。
+- 不要批量修改与当前任务无关的历史 Issue。
 
-## Inspect Before Creating
+## 创建前检查
 
-1. Confirm the target repository and its default branch.
-2. Search open and closed Issues using task-specific keywords. Reuse an open Issue when its scope already matches; do not create a duplicate.
-3. Inspect the repository's existing Issue style, labels, and all open Milestones.
-4. Keep the Issue limited to one clear outcome. Split work when parts can be delivered or verified independently.
+1. 确认目标仓库和默认分支。
+2. 使用与任务相关的关键词搜索开放和已关闭的 Issue。如果已有开放 Issue 的范围完全匹配，应复用它，不要重复创建。
+3. 检查仓库现有的 Issue 风格、标签和所有开放 Milestone。
+4. 确保 Issue 只有一个清晰的结果；如果各部分可以独立交付或验证，应拆分为多个 Issue。
 
-## Title
+## 标题
 
-Use one Chinese type prefix followed by a concrete, verifiable description:
+使用一个中文类型前缀，加上具体且可验证的描述：
 
-| Prefix | Use |
+| 前缀 | 使用场景 |
 |---|---|
-| `[功能]` | New user-facing or system capability |
-| `[修复]` | Defect correction |
-| `[重构]` | Internal restructuring without intended behavior change |
-| `[文档]` | Documentation-only work |
-| `[调研]` | Research, comparison, or proof of concept |
-| `[杂项]` | CI, build, tooling, configuration, or repository maintenance |
+| `[功能]` | 新增面向用户或系统的能力 |
+| `[修复]` | 修复缺陷 |
+| `[重构]` | 预期不改变行为的内部结构调整 |
+| `[文档]` | 仅修改文档 |
+| `[调研]` | 调研、方案比较或概念验证 |
+| `[杂项]` | CI、构建、工具、配置或仓库维护 |
 
-Do not use vague titles such as "优化一下" or "完善功能". Keep the title focused on the observable result.
+不要使用“优化一下”或“完善功能”之类无法验收的标题。标题应聚焦于可以观察到的结果。
 
-## Body
+## 正文
 
-Use this structure unless an existing repository template requires more:
+除非仓库现有 Issue 模板要求更多内容，否则使用以下结构：
 
 ```markdown
 ## 背景
@@ -61,26 +61,26 @@ Use this structure unless an existing repository template requires more:
 - 依赖：<Issue 链接或“无”>
 ```
 
-Only include requirements actually requested or supported by repository context. Do not invent labels, dependencies, test results, CI status, or implementation details.
+只写用户实际要求或仓库上下文能够支持的内容。不要编造标签、依赖、测试结果、CI 状态或实现细节。
 
-## Milestone Selection
+## Milestone 选择
 
-Every new change Issue must be assigned to a suitable open Milestone.
+每个新建的改动 Issue 都必须关联到合适的开放 Milestone。
 
-1. Query the remote repository for all open Milestones before creating the Issue.
-2. If exactly one open Milestone clearly matches the task, select it.
-3. If multiple Milestones exist, select one only when the task has an unambiguous match; otherwise ask the user.
-4. If no open Milestone exists, or the only open Milestone clearly conflicts with the task, stop and ask the user. Do not silently omit the Milestone or create one without authorization.
-5. Pass the exact Milestone title when creating the Issue, or assign it immediately afterward.
+1. 创建 Issue 前，查询目标仓库的所有开放 Milestone。
+2. 如果只有一个开放 Milestone 且与任务明显匹配，选择它。
+3. 如果有多个 Milestone，只有在任务与其中一个明确匹配时才能选择；无法判断时先询问用户。
+4. 如果没有开放 Milestone，或者唯一的开放 Milestone 明显与任务冲突，停止并询问用户。不要静默省略 Milestone，也不要未经授权创建 Milestone。
+5. 创建 Issue 时传入准确的 Milestone 标题；如果创建时未能设置，应立即补设。
 
-## Verify After Mutation
+## 修改后验证
 
-After creating or editing an Issue, read it back from GitHub and verify:
+创建或修改 Issue 后，从 GitHub 重新读取并确认：
 
-- the Issue number, title, state, and URL are correct;
-- the body reflects the agreed scope and acceptance criteria;
-- `milestone` is not null and its title matches the selected Milestone;
-- any labels or dependencies actually requested are present;
-- no duplicate Issue was created.
+- Issue 编号、标题、状态和 URL 正确；
+- 正文符合已经确认的范围和验收标准；
+- `milestone` 不为 `null`，并且标题与选定的 Milestone 一致；
+- 用户要求的标签或依赖确实存在；
+- 没有创建重复 Issue。
 
-If verification fails, correct the scoped metadata and verify again. Report the Issue number, URL, and selected Milestone only after the remote state is confirmed.
+如果验证失败，先修正本次范围内的元数据，再重新验证。只有确认远程状态正确后，才能报告 Issue 编号、URL 和所选 Milestone。
