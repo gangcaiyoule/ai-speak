@@ -1,0 +1,27 @@
+version: "1.0"
+name: ai-speak-go-ci
+displayName: ai-speak-go-ci
+stages:
+- name: Go 检查
+  displayName: Go 检查
+  strategy: naturally
+  trigger: manual
+  steps:
+  - step: build@golang
+    name: go-checks
+    displayName: Go 测试、检查与构建
+    golangVersion: "1.22"
+    commands:
+    - cd server
+    - go mod download
+    - go test ./...
+    - go vet ./...
+    - go build ./...
+    caches:
+    - /go/pkg/mod
+    notify: []
+    strategy:
+      retry: "0"
+triggers:
+  trigger: manual
+notify: []
