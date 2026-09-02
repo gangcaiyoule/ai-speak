@@ -145,3 +145,51 @@ offset  size  字段
 ```
 
 小端序。`flags` 具体位定义在切帧器实现时补充。
+
+## 8. 平台符合性审计
+
+抽象数据流逐条对照官方文档核验，证据来源：
+[AAudio 指南](https://developer.android.google.cn/ndk/guides/audio/aaudio/aaudio)、
+[Oboe FullGuide](https://github.com/google/oboe/blob/main/docs/FullGuide.md)、
+[Apple Audio Unit Hosting Guide](https://developer.apple.com/library/archive/documentation/MusicAudio/Conceptual/AudioUnitHostingGuide_iOS/ConstructingAudioUnitApps/ConstructingAudioUnitApps.html)。
+
+| 抽象约定 | Android 依据（AAudio/Oboe） | iOS 依据（RemoteIO/AVAudioSession） |
+|---|---|---|
+| MicSource 输出帧流、回调不碰 UI 线程 | data callback 运行在高优先级线程，回调内禁止 read/write 同一流 | render callback 运行在实时线程，pull 模型取数 |
+| 生产者永不阻塞（环缓丢旧） | 回调 Do's/Don'ts 明令禁止 malloc/new、mutex、文件/网络、sleep、stop/close | 同类实时线程纪律；aurioTouch 示例即用环形缓冲 |
+| AudioFrame 的 16bit PCM | `PCM_I16`（Q0.15）为标准格式 | RemoteIO 支持 lpcm + 有符号 16 位 |
+| 弱网/背压丢帧语义 | 流可随时断连（拔耳机等），须在错误回调中换线程 stop/close 后重开 | 会话中断/路由变化由 AVAudioSession 通知 |
+| stop()/start() 幂等与重连 | errorCallback → onErrorAfterClose 后可重开流 | session setActive/deActive 周期 |
+| AudioSink.underrunBytes | `getXRunCount()` 官方欠载计数 | I/O buffer duration 可调（默认约 23ms，可请求约 5ms） |
+
+### 8.1 修正：采样率/格式是请求不是保证
+
+三方文档一致确认，`start(format)` 传入的格式只能作为**请求**：
+
+- Apple 原文：系统"may or may not be able to grant the request"，
+  激活后必须读回 `currentHardwareSampleRate`；
+- Oboe 原文：打开流后"it is wise to verify the input format and be
+  prepared to convert data if necessary"，`sampleRate` 等属性应查询获取；
+- Oboe 提供 `setSampleRateConversionQuality()` 可让库代做重采样（默认 Medium）。
+
+因此 `MicSource.start` 契约措辞为：实现按**协商后的实际格式**交付帧；
+实现层要么用 Oboe 内建重采样，要么在管线内做 SRC。R4/R5 落地时必须
+在打开流后回读实际格式并记录。
+
+### 8.2 时间戳来源与已知坑
+
+- AAudio：`AAudioStream_getTimestamp(CLOCK_MONOTONIC)`，官方唯一列入线程
+  安全例外的 get 类函数，须在回调外调用；
+- Oboe：`getTimestamp()` 在 OpenSL ES 路径返回 `ErrorUnimplemented`
+  （Known Issues 原文）——回退到 OpenSL ES 的机型需用本地单调时钟替代，
+  `AudioFrame.timestampMs` 语义不变；
+- iOS：render callback 的 `AudioTimeStamp`（`mHostTime`/`mSampleTime`）。
+
+### 8.3 其他实锤
+
+- AAudio 建议跨线程传递指令用「原子队列」——与环缓的无锁设计同向；
+- Oboe `InputPreset` 默认 `VoiceRecognition`，官方注明为低延迟优化，
+  正是语音对话场景应保持的预设；
+- 撤回记录：本节初稿曾引用 Oboe 内置 `FifoBuffer` 作为环缓先例，经核实
+  当前 main 分支不存在该文件，证据作废。环缓为自研设计，依据是上文
+  官方回调约束本身，而非官方组件。
