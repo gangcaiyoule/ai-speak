@@ -1,11 +1,11 @@
 ---
 name: issue-standard
-description: 当任务需要确定 Issue 范围、验收标准、标题类型、重复检查、标签或 Milestone 关联与验证时，为本仓库创建、拆分、修改或检查 GitHub Issue。
+description: 当任务需要确定 Issue 范围、验收标准、标题类型、重复检查、标签或 Milestone 关联与验证时，为本仓库创建、拆分、修改或检查 Gitee Issue。
 ---
 
 # Issue 规范
 
-为每项改动创建一个可以独立交付和验证的 Issue。在创建或修改 Issue 前，先检查目标仓库当前的 GitHub 状态；除非本 Skill 明确规定，否则沿用仓库现有约定。
+为每项改动创建一个可以独立交付和验证的 Issue。在创建或修改 Issue 前，先检查目标仓库当前的 Gitee 状态；除非本 Skill 明确规定，否则沿用仓库现有约定。
 
 ## 授权与范围
 
@@ -16,7 +16,7 @@ description: 当任务需要确定 Issue 范围、验收标准、标题类型、
 
 ## 创建前检查
 
-1. 确认目标仓库和默认分支。
+1. 确认目标 Gitee 仓库和默认分支。
 2. 使用与任务相关的关键词搜索开放和已关闭的 Issue。如果已有开放 Issue 的范围完全匹配，应复用它，不要重复创建。
 3. 检查仓库现有的 Issue 风格、标签和所有开放 Milestone。
 4. 确保 Issue 只有一个清晰的结果；如果各部分可以独立交付或验证，应拆分为多个 Issue。
@@ -75,7 +75,7 @@ description: 当任务需要确定 Issue 范围、验收标准、标题类型、
 
 ## 修改后验证
 
-创建或修改 Issue 后，从 GitHub 重新读取并确认：
+创建或修改 Issue 后，从 Gitee 重新读取并确认：
 
 - Issue 编号、标题、状态和 URL 正确；
 - 正文符合已经确认的范围和验收标准；
