@@ -1,3 +1,26 @@
 version: "1.0"
-name: 流水线-202609021657
-displayName: 流水线-202609021657
+name: ai-speak-ci
+displayName: ai-speak-ci
+
+stages:
+  - name: verify
+    jobs:
+      - name: go-verify
+        steps:
+          - name: go-checks
+            image: golang:1.22
+            commands:
+              - cd server
+              - go mod download
+              - go test ./...
+              - go vet ./...
+              - go build ./...
+      - name: flutter-verify
+        steps:
+          - name: flutter-checks
+            image: ghcr.io/cirruslabs/flutter:3.35.2
+            commands:
+              - cd mobile
+              - flutter pub get
+              - flutter analyze
+              - flutter test
