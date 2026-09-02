@@ -79,6 +79,24 @@ AudioTransport sendFrame(frame)；events: Stream<TransportEvent>（识别/评测
 
 平台实现各自挂到这三个接口后面，UI/控制器只依赖接口。
 
+### 5.1 会话层（v0.2 新增，参照上游已验证语义）
+
+`src/session.dart` 在 `AudioTransport` 之上叠加会话层，语义参照原仓库
+XE3-ESL 的 `speakup.voice-input.v1`（start/finish/cancel 控制帧、幂等键、
+partial/final 区分、kind+retryable 失败模型），但只定义抽象，不绑定传输栈：
+
+- **生命周期**：`idle → active → (finish → 等终态 | cancel) → closed`。
+  `finish()` 是优雅结束（等服务端 final/failed 终态事件），
+  `cancel()` 是立即中断；终态后不可复用，重试须新开会话。
+- **幂等键**：`VoiceSessionConfig.idempotencyKey`（8–128 字符、首尾无空白），
+  同一逻辑会话跨重连重试保持不变，服务端据此去重。
+- **事件模型**：`SessionStarted / SessionPartial / SessionFinal /
+  SessionFailed(kind, retryable) / SessionStats`。`retryable=true` 时
+  可用同一幂等键重开；传输映射细节由 R6 的 WSS 实现完成。
+
+`AudioTransport` 原契约不变——不破已有用户空间；`VoiceSessionLifecycle`
+状态机是纯 Dart 组件，实现层组合复用，语义由单测固定。
+
 ## 6. 路线图（直接上手，不设 smoke test）
 
 - R1 接口抽象 + Dart 参考环形缓冲 + 单测（本轮）

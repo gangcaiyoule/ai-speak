@@ -1,7 +1,7 @@
 # voice_stream 接口文档
 
 - 模块路径：`mobile/lib/features/voice_stream/`
-- 状态：v0.1（R1 阶段，接口与 Dart 参考实现已定，平台实现未接入）
+- 状态：v0.2（R1.5：新增会话层契约与状态机；平台实现未接入）
 - 范围：读（采集）、传（上行/回包）、放（播放）三条数据通路的抽象；
   UI（字幕/波形）不在本文档范围内，只通过事件流消费数据。
 
@@ -23,6 +23,7 @@ AudioSink ←── AudioFrame                    （播放）
 |---|---|
 | 核心接口与值对象 | `src/contracts.dart` |
 | 共享环形缓冲 | `src/ring_buffer.dart` |
+| 会话层契约与生命周期状态机 | `src/session.dart` |
 
 ## 2. 值对象
 
@@ -100,6 +101,57 @@ AudioSink ←── AudioFrame                    （播放）
 API；自托管网关时上 WebRTC（`flutter_webrtc` + Pion/LiveKit）；自管
 UDP+KCP 为后备。会话延续（上下文、VAD、打断）属于协议/会话层，不压在本
 接口上。
+
+### 5.1 VoiceSession 会话层契约（v0.2 新增）
+
+`src/session.dart` 把上游 XE3-ESL `speakup.voice-input.v1` 已验证的会话
+语义抽象化后叠加在 `AudioTransport` 之上；`AudioTransport` 契约保持不变。
+
+**生命周期与状态机**（`VoiceSessionPhase` + `VoiceSessionLifecycle`）：
+
+```
+idle ──begin()──→ active ──requestFinish()──→ finishing ──complete()──→ closed
+                     │                            │
+                     └──────────abort()───────────┘   （失败/取消；对 closed 幂等）
+```
+
+- `sendFrame` 仅在 `active` 允许；`finishing` 起不再收帧。
+- `complete()` 只能从 `finishing` 进入；非法迁移抛 `StateError`。
+
+**配置**（`VoiceSessionConfig`）：
+
+| 字段 | 约定 |
+|---|---|
+| `idempotencyKey` | 长度 8–128、首尾无空白；同一逻辑会话跨重连重试不变，服务端据此去重 |
+| `format` | 上行音频格式（请求值非保证值，见 8.1 节） |
+
+**事件**（`VoiceSessionEvent` sealed）：
+
+| 子类型 | 字段 | 语义 |
+|---|---|---|
+| `SessionStarted` | — | 会话建立，可上行音频 |
+| `SessionPartial` | `payload: String` | 中间识别/评测结果，JSON 文本 |
+| `SessionFinal` | `payload: String` | 最终结果（终态之一） |
+| `SessionFailed` | `kind: String` / `retryable: bool` | 失败终态；`retryable=true` 时可用同一幂等键重开 |
+| `SessionStats` | `sentFrames` / `droppedFrames` / `bufferedBytes` | 会话层量化统计 |
+
+**`VoiceSession` 接口方法**：
+
+| 方法 | 语义 |
+|---|---|
+| `sendFrame(AudioFrame)` | 非阻塞上行一帧；仅 active 阶段，其余抛 `StateError` |
+| `finish() → Future` | 优雅结束：等服务端终态事件后完成 |
+| `cancel() → Future` | 立即中断；对已关闭会话幂等成功 |
+| `events → Stream` | 上述事件流 |
+| `config` / `phase` | 配置与当前阶段 |
+
+传输实现职责（R6）：把 `begin/finish/cancel` 映射为具体控制帧（如 WSS 的
+`start/finish/cancel`），把服务端事件映射为 `SessionStarted/Partial/
+Final/Failed`；断连一律映射为 `SessionFailed`，不静默吞掉。
+
+单测基线：`mobile/test/voice_stream/session_test.dart`（12 个用例：
+幂等键三项静态校验、正常生命周期、finishing 禁发帧、active 直接取消、
+finishing 失败、abort 幂等、三类非法迁移）。
 
 ## 6. SpscRingBuffer 行为契约
 
