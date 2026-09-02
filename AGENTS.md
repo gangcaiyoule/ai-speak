@@ -6,17 +6,17 @@
 
 | Skill | 用途 |
 |---|---|
-| `issue-standard` | 创建、拆分、修改或检查 GitHub Issue，包括标题类型、范围、验收标准、重复检查和 Milestone 关联 |
+| `issue-standard` | 创建、拆分、修改或检查 Gitee Issue，包括标题类型、范围、验收标准、重复检查和 Milestone 关联 |
 
 ## Skill 使用原则
 
-- 创建、拆分、修改或检查 GitHub Issue 时，必须使用 `issue-standard`。
+- 创建、拆分、修改或检查 Gitee Issue 时，必须使用 `issue-standard`。
 - 用户只要求解释、Review、报告状态或只读诊断时，不因这些任务自动创建 Issue。
 - skill 负责具体操作流程；下列仓库协作规则始终有效。
 
 ## 仓库协作规则
 
-- 主仓库为 `https://github.com/gangcaiyoule/ai-speak.git`，`origin` 指向该仓库；所有开发分支从最新 `origin/main` 创建，禁止直接向 `main` 推送，必须通过 Pull Request 合并。
+- 主仓库为 `https://gitee.com/pp1-2026/24320106.git`，`gitee` 指向该仓库；所有开发分支从最新 `gitee/main` 创建，禁止直接向 `main` 推送，必须通过 Gitee Pull Request 合并。
 - 每项改动先创建范围单一、验收清楚且关联当前 Milestone 的 Issue；一个 Issue 对应一个短分支和一个 Pull Request，PR 目标分支固定为 `main`。
 - 分支命名使用 `feature/<issue>-<description>`、`fix/<issue>-<description>`、`docs/<issue>-<description>`、`refactor/<issue>-<description>` 等格式。
 - 保留用户未提交的代码；工作区不干净或存在并行任务时使用独立 worktree，不得覆盖、删除或重置其他任务的修改。
