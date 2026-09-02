@@ -7,10 +7,12 @@
 | Skill | 用途 |
 |---|---|
 | `issue-standard` | 创建、拆分、修改或检查 Gitee Issue，包括标题类型、范围、验收标准、重复检查和 Milestone 关联 |
+| `gitee-pr` | 使用 Gitee API 创建、更新、关联和验证 Pull Request |
 
 ## Skill 使用原则
 
 - 创建、拆分、修改或检查 Gitee Issue 时，必须使用 `issue-standard`。
+- 创建、更新、关联或检查 Gitee Pull Request 时，必须使用 `gitee-pr`。
 - 用户只要求解释、Review、报告状态或只读诊断时，不因这些任务自动创建 Issue。
 - skill 负责具体操作流程；下列仓库协作规则始终有效。
 
