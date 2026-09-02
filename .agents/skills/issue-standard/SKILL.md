@@ -38,6 +38,32 @@ description: 当任务需要确定 Issue 范围、验收标准、标题类型、
 - 如果用户明确指定了其他负责人，按用户指定值提交，不要擅自改回自己；无法解析负责人身份时先报告并停止写入。
 - 创建或更新后必须从 Gitee 重新读取 `assignee`/负责人字段，确认负责人已设置为预期用户。页面显示“未设置”时，不能声称默认负责人已经生效。
 
+Gitee 企业版写入负责人时，使用仓库所有者路径，并在表单中同时传仓库名和负责人登录名：
+
+```text
+PATCH /api/v5/repos/{owner}/issues/{number}
+Content-Type: application/x-www-form-urlencoded
+
+repo=<repo>
+assignee=<gitee-login>
+```
+
+例如将 Issue `IKCW4K` 指派给当前成员 `AI0106`：
+
+```powershell
+$form = @{
+  repo = '24320106'
+  assignee = 'AI0106'
+}
+Invoke-RestMethod -Method Patch `
+  -Uri 'https://gitee.com/api/v5/repos/pp1-2026/issues/IKCW4K' `
+  -Headers @{ Authorization = "token <PAT>" } `
+  -ContentType 'application/x-www-form-urlencoded' `
+  -Body $form
+```
+
+创建 Issue 时也应在同一个表单中传 `assignee=<gitee-login>`；如果创建接口未生效，立即使用上述 `PATCH` 补设。`assignee` 使用 Gitee 登录名（如 `AI0106`），不是显示名或数字用户 ID。PAT 只能从安全凭据存储读取，不得写入脚本、仓库或输出。
+
 ## Markdown 正文编码
 
 - `body` 必须使用真实换行符组成 Markdown，不得把 `` `n ``、`\\n` 或 HTML 转义文本当作换行直接提交。
