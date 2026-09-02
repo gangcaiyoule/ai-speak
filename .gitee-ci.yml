@@ -1,34 +1,26 @@
-image: golang:1.22
+version: "1.0"
+name: ai-speak-ci
+displayName: ai-speak-ci
 
 stages:
-  - verify
-
-variables:
-  GOPROXY: https://proxy.golang.org,direct
-
-cache:
-  paths:
-    - /go/pkg/mod
-
-go-verify:
-  stage: verify
-  image: golang:1.22
-  before_script:
-    - cd server
-    - go version
-    - go mod download
-  script:
-    - go test ./...
-    - go vet ./...
-    - go build ./...
-
-flutter-verify:
-  stage: verify
-  image: ghcr.io/cirruslabs/flutter:3.35.2
-  before_script:
-    - cd mobile
-    - flutter --version
-    - flutter pub get
-  script:
-    - flutter analyze
-    - flutter test
+  - name: verify
+    jobs:
+      - name: go-verify
+        steps:
+          - name: go-checks
+            image: golang:1.22
+            commands:
+              - cd server
+              - go mod download
+              - go test ./...
+              - go vet ./...
+              - go build ./...
+      - name: flutter-verify
+        steps:
+          - name: flutter-checks
+            image: ghcr.io/cirruslabs/flutter:3.35.2
+            commands:
+              - cd mobile
+              - flutter pub get
+              - flutter analyze
+              - flutter test
