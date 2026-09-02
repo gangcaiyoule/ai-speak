@@ -1,3 +1,5 @@
+import 'evaluation_report.dart';
+
 /// 表示一个口语练习场景。
 class Scene { /// 创建场景值对象。
   const Scene({required this.id, required this.name});
@@ -15,12 +17,21 @@ class PracticeSession { /// 创建练习会话值对象。
   final String status;
 }
 /// 表示一次口语练习的评测报告。
-class EvaluationReport { /// 创建评测报告值对象。
-  const EvaluationReport({required this.id, required this.summary});
+class EvaluationReport { /// 创建评测报告摘要值对象。
+  const EvaluationReport({
+    required this.id,
+    required this.summary,
+    this.status = EvaluationStatus.queued,
+    this.detail,
+  });
   /// 服务端分配的报告标识。
   final String id;
   /// 面向用户展示的评测摘要。
   final String summary;
+  /// 服务端评测任务状态；仅 ready 时 detail 有值。
+  final EvaluationStatus status;
+  /// 结构化报告详情，供后续复盘页面展示。
+  final EvaluationReportDetail? detail;
 }
 /// 定义客户端读取练习场景的操作。
 abstract interface class SceneClient { /// 读取全部可用练习场景。
