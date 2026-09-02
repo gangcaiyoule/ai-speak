@@ -12,6 +12,7 @@ cache:
 
 go-verify:
   stage: verify
+  image: golang:1.22
   before_script:
     - cd server
     - go version
@@ -20,3 +21,14 @@ go-verify:
     - go test ./...
     - go vet ./...
     - go build ./...
+
+flutter-verify:
+  stage: verify
+  image: ghcr.io/cirruslabs/flutter:3.35.2
+  before_script:
+    - cd mobile
+    - flutter --version
+    - flutter pub get
+  script:
+    - flutter analyze
+    - flutter test
