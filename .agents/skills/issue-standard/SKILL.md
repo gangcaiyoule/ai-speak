@@ -21,6 +21,17 @@ description: 当任务需要确定 Issue 范围、验收标准、标题类型、
 3. 检查仓库现有的 Issue 风格、标签和所有开放 Milestone。
 4. 确保 Issue 只有一个清晰的结果；如果各部分可以独立交付或验证，应拆分为多个 Issue。
 
+## Gitee API 要求
+
+使用 Gitee Open API 时，PAT 放在 `Authorization: token <PAT>` 请求头中，不要写入仓库文件、命令输出或 Issue/PR 正文；写操作使用 `application/x-www-form-urlencoded`。
+
+- 创建 Issue：`POST /api/v5/repos/{owner}/issues`。`owner` 在 URL 中，`repo` 在表单中；`title` 必填，`body` 和 `milestone` 按需传入。
+- 更新 Issue：`PATCH /api/v5/repos/{owner}/issues/{number}`。同样必须在表单中传 `repo`；关闭时传 `state=closed`。
+- 读取 Issue：`GET /api/v5/repos/{owner}/{repo}/issues/{number}`；企业项目 Issue 编号可能是字符串（例如 `IKCT51`），不要假设是数字。
+- 读取 Milestone：`GET /api/v5/repos/{owner}/{repo}/milestones`；创建时传 Gitee Milestone 编号到 `milestone`，创建后必须重新读取确认。
+
+创建或更新后不要只相信 HTTP 成功响应：必须用 Gitee API 重新读取 Issue，核对编号、标题、状态、正文和 `milestone`。
+
 ## 标题
 
 使用一个中文类型前缀，加上具体且可验证的描述：
