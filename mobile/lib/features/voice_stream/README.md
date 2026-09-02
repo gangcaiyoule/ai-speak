@@ -95,3 +95,10 @@ AudioTransport sendFrame(frame)；events: Stream<TransportEvent>（识别/评测
 本目录改动必须跑的：`flutter analyze`、`flutter test`（R1/R3/R6 阶段），
 C 层用各端单元测试入口回归；真机项（R4/R5/R7/R8）以实测延迟/丢包数字为准。
 本机当前没有 Flutter SDK 时，验证由有环境的机器执行，不在记录里写没跑过的结果。
+
+## 8. 编码约定
+
+注释统一 Doxygen 风格：Dart 用 `/// @brief` / `@param` / `@return` /
+`@note`，成员行内注释用 `///<`；C 层实现沿用同一套标签（`@file` /
+`@brief` / `@param` / `@return`）。接口语义变更时同步更新
+`docs/24320106/voice-stream-interfaces.md`。
