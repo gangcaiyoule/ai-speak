@@ -1,23 +1,12 @@
 import 'package:flutter/material.dart';
 
-/// Starts the minimal ai-speak Flutter application.
+import 'app/speak_up_app.dart';
+import 'features/coaching/scene/wire_scene_client.dart';
+
 void main() {
-  runApp(const AiSpeakApp());
-}
-
-/// Root widget for the ai-speak client.
-class AiSpeakApp extends StatelessWidget {
-  /// Creates the root application widget.
-  const AiSpeakApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'AI Speak',
-      theme: ThemeData(colorSchemeSeed: Colors.indigo),
-      home: const Scaffold(
-        body: Center(child: Text('AI Speak')),
-      ),
-    );
-  }
+  const baseUri = String.fromEnvironment(
+    'SCENE_API_BASE_URL',
+    defaultValue: 'http://127.0.0.1:8080',
+  );
+  runApp(SpeakUpApp(sceneClient: WireSceneClient(baseUri: Uri.parse(baseUri))));
 }
