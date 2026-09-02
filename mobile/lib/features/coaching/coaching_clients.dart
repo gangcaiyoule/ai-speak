@@ -1,11 +1,3 @@
-/// 表示一个口语练习场景。
-class Scene { /// 创建场景值对象。
-  const Scene({required this.id, required this.name});
-  /// 服务端分配的场景标识。
-  final String id;
-  /// 面向用户展示的场景名称。
-  final String name;
-}
 /// 表示一次口语练习会话。
 class PracticeSession { /// 创建练习会话值对象。
   const PracticeSession({required this.id, required this.status});
@@ -22,9 +14,6 @@ class EvaluationReport { /// 创建评测报告值对象。
   /// 面向用户展示的评测摘要。
   final String summary;
 }
-/// 定义客户端读取练习场景的操作。
-abstract interface class SceneClient { /// 读取全部可用练习场景。
-  Future<List<Scene>> listScenes(); }
 /// 定义客户端管理练习会话的操作。
 abstract interface class PracticeClient {
   /// 创建指定场景的练习会话。
