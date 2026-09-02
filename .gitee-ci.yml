@@ -1,0 +1,22 @@
+image: golang:1.22
+
+stages:
+  - verify
+
+variables:
+  GOPROXY: https://proxy.golang.org,direct
+
+cache:
+  paths:
+    - /go/pkg/mod
+
+go-verify:
+  stage: verify
+  before_script:
+    - cd server
+    - go version
+    - go mod download
+  script:
+    - go test ./...
+    - go vet ./...
+    - go build ./...
