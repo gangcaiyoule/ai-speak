@@ -1,0 +1,125 @@
+openapi: 3.0.3
+info:
+  title: SpeakUp Scene Catalog API
+  version: 1.0.0
+paths:
+  /v1/scenes:
+    get:
+      operationId: listScenes
+      responses:
+        '200':
+          description: Active scenes in server-defined order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scenes]
+                properties:
+                  scenes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SceneDefinition'
+  /v1/scenes/{scene_id}:
+    get:
+      operationId: getScene
+      parameters:
+        - $ref: '#/components/parameters/SceneId'
+      responses:
+        '200':
+          description: Scene detail with roles and practice options.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SceneDefinition'
+        '404':
+          description: Scene not found.
+  /v1/scenes/{scene_id}/roles:
+    get:
+      operationId: listSceneRoles
+      parameters:
+        - $ref: '#/components/parameters/SceneId'
+      responses:
+        '200':
+          description: Roles available for a scene.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [roles]
+                properties:
+                  roles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RoleDefinition'
+components:
+  parameters:
+    SceneId:
+      name: scene_id
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    SceneDefinition:
+      type: object
+      required: [scene_id, practice_experience, scene_category, name, scene_version, status, prompt, roles, practice_options]
+      properties:
+        scene_id: {type: string}
+        practice_experience: {type: string}
+        scene_category: {type: string}
+        name: {type: string}
+        scene_version: {type: integer, minimum: 1}
+        status: {type: string, enum: [active, inactive]}
+        prompt: {$ref: '#/components/schemas/ScenePrompt'}
+        roles:
+          type: array
+          items: {$ref: '#/components/schemas/RoleDefinition'}
+        practice_options:
+          type: array
+          items: {$ref: '#/components/schemas/PracticeOption'}
+    ScenePrompt:
+      type: object
+      required: [public_scene_brief, practice_goal, user_role, ai_role, persona_summary, focus_areas, turn_blueprints]
+      properties:
+        public_scene_brief: {type: string}
+        practice_goal: {type: string}
+        user_role: {type: string}
+        ai_role: {type: string}
+        persona_summary: {type: string}
+        focus_areas:
+          type: array
+          items: {type: string}
+        turn_blueprints:
+          type: array
+          items: {type: string}
+    RoleDefinition:
+      type: object
+      required: [role_definition_id, scene_id, role_type, display_name, responsibilities, style, practice_objectives]
+      properties:
+        role_definition_id: {type: string}
+        scene_id: {type: string}
+        role_type: {type: string}
+        display_name: {type: string}
+        responsibilities: {type: string}
+        style: {type: string}
+        practice_objectives:
+          type: array
+          items:
+            type: object
+            required: [objective_id, description]
+            properties:
+              objective_id: {type: string}
+              description: {type: string}
+    PracticeOption:
+      type: object
+      required: [practice_option_id, scene_id, practice_mode, display_name, suggested_duration_seconds, turn_policy_ref, session_policy_ref, evaluation_policy_ref]
+      properties:
+        practice_option_id: {type: string}
+        scene_id: {type: string}
+        practice_mode: {type: string}
+        display_name: {type: string}
+        suggested_duration_seconds: {type: integer, minimum: 1}
+        turn_policy_ref: {type: string}
+        session_policy_ref: {type: string}
+        evaluation_policy_ref: {type: string}
+        role_definition_id: {type: string, nullable: true}
