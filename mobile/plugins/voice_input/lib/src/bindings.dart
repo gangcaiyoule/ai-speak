@@ -125,7 +125,9 @@ final class FfiVoiceInputBindings implements VoiceInputBindings {
       return 0;
     }
     if (_readBuffer == null || _readBufferBytes < destination.length) {
-      _readBuffer?.free();
+      if (_readBuffer != null) {
+        malloc.free(_readBuffer!);
+      }
       _readBuffer = malloc<Uint8>(destination.length);
       _readBufferBytes = destination.length;
     }
@@ -173,7 +175,7 @@ typedef ViStartDart = int Function(Pointer<ViConfig>);
 typedef ViStopNative = Int32 Function();
 typedef ViStopDart = int Function();
 typedef ViReadNative = Int32 Function(Pointer<Uint8>, Int32);
-typedef ViReadDart = int Function(Pointer<Uint8>, Int32);
+typedef ViReadDart = int Function(Pointer<Uint8>, int);
 typedef ViDroppedNative = Uint64 Function();
 typedef ViDroppedDart = int Function();
 typedef ViFormatNative = Int32 Function(
