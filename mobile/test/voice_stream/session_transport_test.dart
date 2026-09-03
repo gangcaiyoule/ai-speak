@@ -57,6 +57,7 @@ void main() {
       final sub = session.events.listen(events.add);
 
       await session.start();
+      await pumpEventQueue();
       expect(session.phase, VoiceSessionPhase.active);
       expect(events.whereType<SessionStarted>(), hasLength(1));
       expect(transport.texts.first, contains('"type":"start"'));
@@ -80,7 +81,7 @@ void main() {
       transport.emit(
         const TransportStats(sentFrames: 7, droppedFrames: 1, bufferedBytes: 640),
       );
-      await Future<void>.delayed(Duration.zero);
+      await pumpEventQueue();
 
       final partial = events.whereType<SessionPartial>().single;
       expect(partial.payload, '{"partial":true}');
@@ -101,7 +102,7 @@ void main() {
       await session.start();
 
       transport.emit(TransportAudioFrame(frame(0)));
-      await Future<void>.delayed(Duration.zero);
+      await pumpEventQueue();
       expect(events.whereType<SessionPartial>(), isEmpty);
       expect(events.whereType<SessionStats>(), isEmpty);
 
@@ -118,7 +119,7 @@ void main() {
       await session.start();
 
       transport.fail(StateError('断连'));
-      await Future<void>.delayed(Duration.zero);
+      await pumpEventQueue();
 
       final failed = events.whereType<SessionFailed>().single;
       expect(failed.kind, 'transport');
@@ -147,6 +148,7 @@ void main() {
 
       transport.emit(const TransportMessage('{"type":"finish"}'));
       await finishing.timeout(const Duration(seconds: 2));
+      await pumpEventQueue();
 
       expect(events.whereType<SessionFinal>().single.payload, '{"type":"finish"}');
       expect(session.phase, VoiceSessionPhase.closed);
@@ -169,6 +171,7 @@ void main() {
 
       final finishing = session.finish();
       await finishing.timeout(const Duration(seconds: 2));
+      await pumpEventQueue();
 
       final failed = events.whereType<SessionFailed>().single;
       expect(failed.kind, 'finish-timeout');

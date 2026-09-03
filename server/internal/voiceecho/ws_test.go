@@ -45,12 +45,13 @@ func TestEchoBinaryFrame(t *testing.T) {
 	conn := dial(t, "ws"+server.URL[len("http"):])
 
 	// 模拟 12B 帧头 + 负载的音频包。
+	payload := []byte{0xAA, 0xBB, 0xCC, 0xDD}
 	packet := append([]byte{
 		0x01, 0x00, 0x00, 0x00, // seq = 1
 		0xE8, 0x03, 0x00, 0x00, // timestamp_ms = 1000
 		0x04, 0x00, // size = 4
 		0x01, 0x00, // flags = gapBefore
-	}, 0xAA, 0xBB, 0xCC, 0xDD...)
+	}, payload...)
 
 	if err := conn.WriteMessage(websocket.BinaryMessage, packet); err != nil {
 		t.Fatalf("write binary: %v", err)
