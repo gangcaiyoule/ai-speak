@@ -1,7 +1,7 @@
 # voice_stream 接口文档
 
 - 模块路径：`mobile/lib/features/voice_stream/`
-- 状态：v0.2（R1.5：新增会话层契约与状态机；平台实现未接入）
+- 状态：v0.3（R3：切帧器与帧头编解码；平台实现未接入）
 - 范围：读（采集）、传（上行/回包）、放（播放）三条数据通路的抽象；
   UI（字幕/波形）不在本文档范围内，只通过事件流消费数据。
 
@@ -23,6 +23,7 @@ AudioSink ←── AudioFrame                    （播放）
 |---|---|
 | 核心接口与值对象 | `src/contracts.dart` |
 | 共享环形缓冲 | `src/ring_buffer.dart` |
+| 切帧器与帧头编解码 | `src/frame_slicer.dart` |
 | 会话层契约与生命周期状态机 | `src/session.dart` |
 
 ## 2. 值对象
@@ -52,6 +53,10 @@ AudioSink ←── AudioFrame                    （播放）
 | `seq` | `int` | 单调递增帧序号；**跳号即表示上游丢帧**，接收方据此估算丢包率 |
 | `timestampMs` | `int` | 采集时刻毫秒时间戳，用于端到端延迟测量 |
 | `samples` | `Uint8List` | PCM 样本，16 位小端 |
+| `flags` | `int` | 标志位，见 [AudioFrameFlags]；缺省 0，既有构造不受影响 |
+
+`AudioFrameFlags` 位定义：`none = 0x0000`；`gapBefore = 0x0001`（本帧之前
+存在丢帧空洞，发送方主动标记，与 seq 跳号互为补充）。
 
 ### 2.3 TransportEvent（sealed）
 
@@ -183,9 +188,9 @@ finishing 失败、abort 幂等、三类非法迁移）。
 往返、回绕两段视图、覆盖丢旧计数、超容量保尾、分批消费、截断读、空缓冲、
 越界、非法容量）。C 实现落地后用同一组用例在 NDK/Xcode 下回归。
 
-## 7. 帧头格式（传输层预留）
+## 7. 帧头格式（R3 已实现）
 
-切帧器（R3）按时间窗（默认 20ms @ 16kHz/16bit/mono = 640B）切出定长帧，
+切帧器按时间窗（默认 20ms @ 16kHz/16bit/mono = 640B）切出定长帧，
 外发时加 12 字节帧头：
 
 ```
@@ -193,10 +198,30 @@ offset  size  字段
 0       4     uint32 seq          帧序号
 4       4     uint32 timestamp_ms 采集时间戳
 8       2     uint16 size         负载长度
-10      2     uint16 flags        标志位（丢帧空洞等，待定）
+10      2     uint16 flags        标志位
 ```
 
-小端序。`flags` 具体位定义在切帧器实现时补充。
+小端序。`flags` 位定义：`gapBefore = 0x0001`——本帧之前存在丢帧空洞，
+由发送方（切帧器，经上游 `markGap()` 告知）主动标记；`0x0000` 为无标志。
+
+实现位于 `src/frame_slicer.dart`：
+
+| 组件 | 语义 |
+|---|---|
+| `FrameSlicer.push(chunk) → List<AudioFrame>` | 任意长度字节块切帧；残余缓冲，凑满即出帧 |
+| `FrameSlicer.drain(ring) → List<AudioFrame>` | 接环形缓冲出口；peek/advance 同步成对，跨回绕两段视图无缝拼接 |
+| `FrameSlicer.flush() → List<AudioFrame>` | 流结束收尾，残余以短帧输出；seq 跨帧流连续，timestamp 基准重新起算 |
+| `FrameSlicer.markGap()` | 下一产出的帧携带 `gapBefore` 标志（只标一帧） |
+| `FrameHeaderCodec.encode/decode/decodeHeader` | 帧头小端序编解码；传输字节 = 帧头 12B + 负载 |
+
+时间戳语义：每帧 `timestampMs` = 帧流首字节到达时刻（`clock` 可注入，
+缺省本地墙钟）+ 帧序 × 帧时长；输出的 `samples` 一律为拷贝，不与内部
+缓冲共享内存。
+
+单测基线：`mobile/test/voice_stream/frame_slicer_test.dart`（11 个用例：
+flags 缺省兼容、非整块切帧、空输入、flush 短帧与基准复位、gap 标记只落
+一帧、drain 跨回绕拼接、drain 空缓冲、编解码往返、小端序布局、长度异常、
+非法构造参数）。
 
 ## 8. 平台符合性审计
 

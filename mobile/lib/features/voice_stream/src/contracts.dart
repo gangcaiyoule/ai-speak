@@ -41,6 +41,21 @@ class AudioFormat {
   }
 }
 
+/// @brief 帧头 flags 标志位定义。
+///
+/// 位定义随切帧器（R3）落地固定，见模块 README 第 3 节与
+/// docs/24320106/voice-stream-interfaces.md 第 7 节。
+abstract final class AudioFrameFlags {
+  /// @brief 无标志。
+  static const int none = 0x0000;
+
+  /// @brief 本帧之前存在丢帧空洞。
+  ///
+  /// 上游（环形缓冲丢旧/采集断流）丢弃数据后由切帧器打在下一帧上；
+  /// 与 seq 跳号互为补充：跳号是接收方被动观测，本位是发送方主动标记。
+  static const int gapBefore = 0x0001;
+}
+
 /// @brief 一帧定长 PCM 音频。
 ///
 /// 是贯穿采集、传输、播放的统一数据单元。
@@ -50,10 +65,12 @@ class AudioFrame {
   /// @param seq 单调递增帧序号；跳号即表示上游丢帧。
   /// @param timestampMs 采集时刻的毫秒时间戳，用于端到端延迟测量。
   /// @param samples PCM 样本（16 位小端，交错排布）。
+  /// @param flags 标志位（见 [AudioFrameFlags]）；缺省无标志，既有调用不受影响。
   const AudioFrame({
     required this.seq,
     required this.timestampMs,
     required this.samples,
+    this.flags = AudioFrameFlags.none,
   });
 
   /// @brief 单调递增的帧序号；跳号即表示上游丢帧。
@@ -64,6 +81,9 @@ class AudioFrame {
 
   /// @brief PCM 样本（16 位小端，交错排布）。
   final Uint8List samples;
+
+  /// @brief 标志位，见 [AudioFrameFlags]；缺省 0（无标志）。
+  final int flags;
 }
 
 /// @brief 采集端契约：把麦克风抽象为可随时中断的帧流。

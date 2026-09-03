@@ -45,8 +45,13 @@ Dart 参考实现 `src/ring_buffer.dart` 与 C 实现语义逐条对齐，并以
 uint32 seq; uint32 timestamp_ms; uint16 size; uint16 flags;
 ```
 
-`flags` 标记丢帧空洞（上游 drop 后 seq 跳号，服务端据此估算丢包率）。
-切帧器是纯函数式组件，可单测。
+`flags` 标记丢帧空洞：上游（环缓丢旧/采集断流）drop 后由切帧器把
+`gapBefore = 0x0001` 打在下一帧上；与 seq 跳号互为补充——跳号是接收方
+被动观测，本位是发送方主动标记，服务端据此估算丢包率。
+
+R3 已实现 `src/frame_slicer.dart`：`FrameSlicer`（纯 Dart 切帧，`push`/
+`drain`/`flush`/`markGap`，`drain` 直接接环形缓冲出口并同步成对
+peek/advance）与 `FrameHeaderCodec`（帧头小端序编解码）。
 
 ## 4. 传输
 
