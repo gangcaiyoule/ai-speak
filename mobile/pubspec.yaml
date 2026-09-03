@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   web_socket_channel: ^3.0.0
+  voice_input:
+    path: plugins/voice_input
 
 dev_dependencies:
   flutter_test:

@@ -1,0 +1,28 @@
+name: voice_input
+description: "voice_stream 采集端平台实现：Oboe（Android）/ RemoteIO（iOS），C ABI 经 dart:ffi 对接。"
+version: 0.1.0
+homepage:
+
+environment:
+  sdk: ^3.13.2
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ffi: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+# The following section is specific to Flutter packages.
+flutter:
+  # 纯 FFI 插件：原生库经 dart:ffi 直接加载，无平台通道与 pluginClass。
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true
+      ios:
+        ffiPlugin: true
