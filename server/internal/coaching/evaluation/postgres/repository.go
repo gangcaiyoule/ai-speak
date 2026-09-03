@@ -245,8 +245,107 @@ func loadDimensions(ctx context.Context, q queryer, reportID string, formal *eva
 		d.Examples = []evaluation.Finding{}
 		formal.Dimensions = append(formal.Dimensions, d)
 	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	if err = rows.Close(); err != nil {
+		return err
+	}
+	indexes := make(map[string]int, len(formal.Dimensions))
+	for i := range formal.Dimensions {
+		indexes[formal.Dimensions[i].Key] = i
+	}
+	if err = loadFindings(ctx, q, reportID, formal, indexes); err != nil {
+		return err
+	}
 	formal.PriorityActions = []evaluation.PriorityAction{}
+	actions, err := q.QueryContext(ctx, `SELECT d.dimension_key,f.finding_key
+        FROM evaluation_priority_actions a
+        JOIN evaluation_dimensions d ON d.id=a.dimension_id
+        JOIN evaluation_findings f ON f.id=a.finding_id
+        WHERE a.report_id=$1 ORDER BY a.position`, reportID)
+	if err != nil {
+		return fmt.Errorf("load priority actions: %w", err)
+	}
+	defer actions.Close()
+	for actions.Next() {
+		var action evaluation.PriorityAction
+		if err = actions.Scan(&action.DimensionKey, &action.FindingID); err != nil {
+			return err
+		}
+		formal.PriorityActions = append(formal.PriorityActions, action)
+	}
+	return actions.Err()
+}
+
+func loadFindings(ctx context.Context, q queryer, reportID string, formal *evaluation.FormalReport, indexes map[string]int) error {
+	rows, err := q.QueryContext(ctx, `SELECT d.dimension_key,f.finding_key,f.kind,f.message,
+        COALESCE(f.suggestion,''),e.id,e.source_turn_id,e.start_utf8_byte,e.end_utf8_byte,e.original_excerpt
+        FROM evaluation_findings f
+        JOIN evaluation_dimensions d ON d.id=f.dimension_id
+        LEFT JOIN evaluation_finding_evidence fe ON fe.finding_id=f.id
+        LEFT JOIN evaluation_evidence e ON e.id=fe.evidence_id
+        WHERE f.report_id=$1 ORDER BY d.position,f.kind,f.position,fe.position`, reportID)
+	if err != nil {
+		return fmt.Errorf("load findings: %w", err)
+	}
+	defer rows.Close()
+	type location struct{ dimension, group, finding int }
+	locations := map[string]location{}
+	refs := map[string]map[string]bool{}
+	for rows.Next() {
+		var dimensionKey, findingKey, kind, message, suggestion string
+		var evidenceID, turnID, excerpt sql.NullString
+		var start, end sql.NullInt64
+		if err = rows.Scan(&dimensionKey, &findingKey, &kind, &message, &suggestion, &evidenceID, &turnID, &start, &end, &excerpt); err != nil {
+			return err
+		}
+		dimensionIndex, ok := indexes[dimensionKey]
+		if !ok {
+			return fmt.Errorf("finding references unknown dimension %q", dimensionKey)
+		}
+		groups := findingGroups(&formal.Dimensions[dimensionIndex])
+		groupIndex := findingGroupIndex(kind)
+		if groupIndex < 0 {
+			return fmt.Errorf("unknown finding kind %q", kind)
+		}
+		key := dimensionKey + "\x00" + findingKey
+		place, ok := locations[key]
+		if !ok {
+			*groups[groupIndex] = append(*groups[groupIndex], evaluation.Finding{ID: findingKey, Message: message, Suggestion: suggestion, Evidence: []evaluation.Evidence{}})
+			place = location{dimensionIndex, groupIndex, len(*groups[groupIndex]) - 1}
+			locations[key] = place
+		}
+		if evidenceID.Valid {
+			finding := &(*findingGroups(&formal.Dimensions[place.dimension])[place.group])[place.finding]
+			finding.Evidence = append(finding.Evidence, evaluation.Evidence{EvidenceRefID: evidenceID.String, TurnID: turnID.String, StartUTF8Byte: int(start.Int64), EndUTF8Byte: int(end.Int64), OriginalExcerpt: excerpt.String})
+			if refs[dimensionKey] == nil {
+				refs[dimensionKey] = map[string]bool{}
+			}
+			if !refs[dimensionKey][evidenceID.String] {
+				formal.Dimensions[dimensionIndex].EvidenceRefs = append(formal.Dimensions[dimensionIndex].EvidenceRefs, evidenceID.String)
+				refs[dimensionKey][evidenceID.String] = true
+			}
+		}
+	}
 	return rows.Err()
+}
+
+func findingGroups(dimension *evaluation.Dimension) [3]*[]evaluation.Finding {
+	return [3]*[]evaluation.Finding{&dimension.Strengths, &dimension.Improvements, &dimension.Examples}
+}
+
+func findingGroupIndex(kind string) int {
+	switch kind {
+	case "STRENGTH":
+		return 0
+	case "IMPROVEMENT":
+		return 1
+	case "RECOMMENDED_EXAMPLE":
+		return 2
+	default:
+		return -1
+	}
 }
 
 func loadFeedback(ctx context.Context, q queryer, reportID string, out *evaluation.Report) error {
