@@ -10,7 +10,7 @@
     "PATH": "/opt/flutter/bin:${containerEnv:PATH}"
   },
   "onCreateCommand": "bash .devcontainer/setup-flutter.sh",
-  "postCreateCommand": "flutter --version && cd mobile && flutter pub get && flutter analyze && flutter test",
+  "postCreateCommand": "flutter --version && cd mobile && flutter pub get",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -18,10 +18,5 @@
         "Dart-Code.flutter"
       ]
     }
-  },
-  "hostRequirements": {
-    "cpus": 4,
-    "memory": "8gb",
-    "storage": "32gb"
   }
 }
