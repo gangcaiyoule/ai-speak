@@ -1,634 +1,326 @@
-# 
+# 分析英语陪练模块
 
-> "C:\Users\yejunbo\Documents\Codex\2026-09-02\ih\outputs\24320106-course-package\prompts\D1\day1-development-prompt.txt"按照这里的要求写代码，规范在这里"C:\Users\yejunbo\Desktop\24320106-course-package"
+> 分析一下写个人英语陪练的模块有哪些
 
-已完成场景列表、详情与练习配置最小流程，修改位于 Gitee 工作区：
+个人英语陪练可以拆成以下几个核心模块：
 
-`C:\Users\yejunbo\Documents\Codex\2026-09-02\ih\work\gitee-repo`
+## 1. 用户与学习目标模块
 
-主要修改：
+用于明确“练什么、为谁练”。
 
-- 新增 Flutter 场景模型、Wire Client、JSON 解码器。
-- 新增 `PreparationController`，支持加载、空列表、失败重试、详情版本校验、角色切换和选项筛选。
-- 新增 Practice 页面和路由入口。
-- Go 服务端实现 `/v1/scenes`、详情和角色接口。
-- 新增 OpenAPI 契约及 Controller、服务端测试。
-- 删除旧的重复 `SceneClient` 声明。
-- 未修改 `daily/`、`prompts/`、`docs/`，也未实现实时语音、练习报告、JD、简历和计划功能。
+- 用户注册与登录
+- 英语水平评估：词汇量、听力、口语、语法
+- 学习目标设置：
+  - 日常交流
+  - 出国旅游
+  - 面试英语
+  - 商务英语
+  - 雅思、托福
+  - 职场汇报
+- 每日学习时长与频率
+- 学习计划和目标提醒
 
-验证结果：
+## 2. 陪练角色模块
 
-- `gofmt`
-- `go test ./...`：通过
-- `go vet ./...`：通过
-- `git diff --check`：通过
-- `flutter pub get`、`dart format`、`flutter analyze`、`flutter test`：未执行成功，原因是当前环境未安装 `flutter` 和 `dart`。
+这是产品的核心差异点，决定用户愿不愿意长期使用。
 
-建议提交信息：
+可以预设不同角色：
+
+- 朋友：轻松聊天
+- 外教：纠正表达和发音
+- 面试官：模拟面试
+- 同事：职场沟通
+- 旅行向导：机场、酒店、点餐场景
+- 老师：讲解语法和词汇
+- 语言交换伙伴：中英互助
+
+角色需要具备：
+
+- 人设和性格
+- 语气风格
+- 英语水平
+- 纠错程度
+- 适合的使用场景
+- 是否主动引导话题
+
+## 3. 对话陪练模块
+
+用户实际进行练习的主要页面。
+
+基本功能包括：
+
+- 文字聊天
+- 语音聊天
+- 实时语音识别
+- AI 回复
+- 中英文切换
+- 对话上下文记忆
+- AI 主动提问
+- 用户卡顿时提供提示
+- 结束对话
+- 重新开始练习
+
+建议支持三种模式：
+
+### 自由聊天
+
+用户自主选择话题，例如电影、工作、旅行。
+
+### 场景模拟
+
+例如：
+
+- 在餐厅点餐
+- 机场办理登机
+- 酒店入住
+- 面试
+- 会议发言
+- 打电话投诉
+
+### 逐句训练
+
+AI 给出一句中文或英文，用户进行翻译或复述，适合初学者。
+
+## 4. 语音与发音模块
+
+英语陪练与普通聊天机器人的重要区别，就是要处理口语。
+
+主要包括：
+
+- 语音录入
+- 语音转文字（ASR，自动语音识别）
+- AI 朗读
+- 文字转语音（TTS，语音合成）
+- 发音评分
+- 单词级发音检测
+- 连读、重音、语调分析
+- 语速分析
+- 停顿和口头禅识别
+
+可以给用户反馈：
+
+- 单词发音错误
+- 句子重音不自然
+- 语速过快
+- 停顿过多
+- 语法正确但表达不地道
+
+## 5. 纠错与反馈模块
+
+陪练不能只聊天，还要让用户知道哪里可以改进。
+
+建议将错误分为：
+
+- 语法错误
+- 单词使用错误
+- 拼写错误
+- 发音错误
+- 中式英语
+- 表达不自然
+- 语气不合适
+- 句子结构问题
+
+反馈方式可以分级：
+
+- 轻度模式：只纠正严重错误
+- 标准模式：纠正主要语法和表达
+- 严格模式：逐句分析
+- 教学模式：解释错误原因并给出练习
+
+例如：
+
+> I very like this movie.
+
+反馈：
+
+- 更自然：`I really like this movie.`
+- 问题：`very like` 不能这样搭配
+- 可替换表达：`I’m a big fan of this movie.`
+
+## 6. 词汇与表达积累模块
+
+将对话中出现的内容转化为可复习的学习材料。
+
+功能包括：
+
+- 自动提取生词
+- 收藏实用句子
+- 查看中文释义
+- 查看音标和发音
+- 查看例句
+- 查看同义表达
+- 查看适用场景
+- 标记“已掌握”或“需要复习”
+
+最好区分：
+
+- 生词
+- 高频词
+- 地道表达
+- 个人常犯错误
+- 面试/旅行等专题词汇
+
+## 7. 复习与强化模块
+
+让用户把“聊过”变成“真正学会”。
+
+可以设计：
+
+- 单词卡片
+- 听音选词
+- 中译英
+- 英译中
+- 句子跟读
+- 录音复述
+- 错题重练
+- 间隔重复（Spaced Repetition，按遗忘规律复习）
+- 每日 5 分钟复习
+
+复习内容应优先来自用户自己的对话和错误，而不是完全使用通用题库。
+
+## 8. 学习报告模块
+
+帮助用户了解自己的进步。
+
+可以展示：
+
+- 练习次数
+- 连续学习天数
+- 总练习时长
+- 说了多少句英语
+- 常犯语法错误
+- 高频生词
+- 词汇量变化
+- 平均发音分数
+- 平均响应速度
+- 流利度变化
+- 不同场景的表现
+
+报告要突出趋势，例如：
+
+> 过去 7 天，平均每句话停顿次数从 3.2 次下降到 2.1 次。
+
+## 9. 内容与课程模块
+
+如果产品不仅是聊天工具，还可以加入系统课程。
+
+课程可以按以下方式组织：
+
+- 按水平：初级、中级、高级
+- 按场景：旅游、面试、日常、商务
+- 按能力：听力、口语、词汇、语法
+- 按任务：自我介绍、表达观点、讲述经历
+- 按主题：电影、运动、科技、职场
+
+每节课可以包含：
+
+1. 热身问题
+2. 核心词汇
+3. 示例对话
+4. AI 陪练
+5. 错误反馈
+6. 课后复习
+
+## 10. 个性化记忆模块
+
+AI 需要记住用户的长期信息，才能像“个人陪练”。
+
+可以记住：
+
+- 用户的英语水平
+- 常见错误
+- 已掌握词汇
+- 感兴趣的话题
+- 工作和生活背景
+- 练习偏好
+- 不喜欢的纠错方式
+- 最近学习目标
+
+例如用户经常把过去时说错，AI 后续对话中可以适当增加过去经历类问题。
+
+同时要注意隐私：
+
+- 允许用户查看记忆
+- 允许删除记忆
+- 不保存敏感信息
+- 明确语音和对话数据的用途
+
+## 11. 激励与习惯模块
+
+英语学习最容易失败在“不能坚持”。
+
+可以加入：
+
+- 每日任务
+- 连续打卡
+- 学习提醒
+- 成就徽章
+- 周目标
+- 练习等级
+- 学习进度
+- 任务完成反馈
+
+但激励不宜过度游戏化，重点仍然应该是有效练习。
+
+## 12. 管理与运营模块
+
+如果是完整产品，还需要后台管理功能：
+
+- 用户管理
+- 角色管理
+- 场景管理
+- 课程管理
+- 词汇管理
+- Prompt（提示词）管理
+- 对话质量监控
+- AI 回复审核
+- 使用量和费用统计
+- 用户反馈处理
+- 敏感内容检测
+
+## 推荐的 MVP（最小可行版本）
+
+第一版不建议一次做全，可以先实现：
+
+1. 用户登录
+2. 英语水平和目标设置
+3. AI 角色选择
+4. 文字对话
+5. 语音输入和语音回复
+6. 基础语法纠错
+7. 对话结束后的总结
+8. 生词和错误收藏
+9. 简单学习记录
+
+基本流程可以是：
 
 ```text
-feat(coaching): implement scene selection flow
+选择目标
+  ↓
+选择陪练角色
+  ↓
+选择练习场景
+  ↓
+进行文字或语音对话
+  ↓
+AI 实时回应
+  ↓
+结束后生成反馈
+  ↓
+收藏错误和表达
+  ↓
+复习巩固
 ```
 
-当前仍需在安装 Flutter SDK 的环境中执行移动端格式化、静态检查和测试。
+从产品价值来看，最核心的是：
 
-> 给出对应issue和pr文案
+> 低压力地开口说英语，并且能得到及时、准确、容易理解的反馈。
 
-下面是可直接复制到 Gitee 的文案。
+因此，优先级应当是：
 
-## Issue
-
-**标题**
-
-```text
-[功能] 完成场景列表、详情和练习目标选择
-```
-
-**内容**
-
-```markdown
-## 功能描述
-
-实现 SpeakUp 进入 Practice 后的场景选择最小流程：
-
-进入 Practice
--> 加载场景列表
--> 按练习类型展示场景
--> 查看场景详情
--> 选择用户角色
--> 选择练习模式
--> 生成完整场景选择结果
-
-## 实现范围
-
-- 实现场景列表接口和客户端调用。
-- 支持场景列表加载中、加载成功、空列表和请求失败状态。
-- 请求失败时支持重试。
-- 按服务端返回顺序展示场景。
-- 实现场景详情和角色信息加载。
-- 校验详情的 `scene_id` 和 `scene_version`。
-- 展示场景描述、练习目标、用户角色、AI 角色、人物设定和练习重点。
-- 实现用户角色选择。
-- 根据角色筛选兼容的练习模式。
-- 展示练习模式、名称和建议时长。
-- 未完成角色或练习模式选择时，开始按钮不可用。
-- 生成包含场景、角色 ID 和练习选项 ID 的选择结果。
-- 补充 Flutter Controller 测试和 Go 服务端接口测试。
-
-## 验收标准
-
-- [ ] 可以进入 Practice 页面。
-- [ ] 场景列表可以从接口加载。
-- [ ] 场景按照服务端返回顺序展示。
-- [ ] 场景列表为空时展示空状态，不构造默认场景。
-- [ ] 场景列表请求失败时展示错误信息和重试入口。
-- [ ] 点击场景后可以加载详情。
-- [ ] 场景详情版本不一致时拒绝继续选择。
-- [ ] 可以查看场景描述、目标、角色和练习重点。
-- [ ] 切换角色后，练习选项会重新筛选。
-- [ ] 未完成必要选择时，开始按钮不可用。
-- [ ] 完成选择后生成正确的场景选择结果。
-- [ ] 不实现实时语音、回答提交、评分和练习报告。
-
-## 技术范围
-
-- `mobile/lib/features/coaching/scene/`
-- `mobile/lib/features/coaching/preparation/`
-- `mobile/lib/app/`
-- `mobile/test/coaching/preparation/`
-- `api/modules/scene.yaml`
-- `server/internal/coaching/scene/`
-- `server/internal/coaching/http.go`
-
-## 不在本 Issue 范围内
-
-- 岗位 JD 和简历上传。
-- 练习计划管理。
-- 实时问答。
-- 麦克风录音、语音转写和语音播放。
-- 练习中的回答提交和轮次推进。
-- 评分、复盘和练习报告。
-- 远程 Issue、Commit 或 Pull Request 自动创建。
-```
-
-## PR
-
-**标题**
-
-```text
-feat(coaching): implement scene selection flow
-```
-
-**内容**
-
-```markdown
-## 功能描述
-
-完成 Practice 场景选择最小用户流程，包括场景列表、场景详情、角色选择和练习模式选择。
-
-## 变更内容
-
-- 新增场景领域模型：
-  - `SceneDefinition`
-  - `RoleDefinition`
-  - `PracticeOption`
-  - `PracticeObjective`
-  - `SceneSelectionSnapshot`
-- 新增场景 JSON Wire 解码和 HTTP Client。
-- 新增场景列表加载、空状态、错误状态和失败重试。
-- 新增场景详情加载和 `scene_id`、`scene_version` 校验。
-- 新增角色选择和兼容练习选项筛选。
-- 新增完整选择结果回调。
-- 新增 Practice 页面和 `/practice` 路由。
-- 实现场景服务端目录、详情接口和角色接口。
-- 新增场景 OpenAPI 契约。
-- 删除启动骨架中的重复 `SceneClient` 声明。
-- 新增 Flutter Controller 测试和 Go 服务端测试。
-
-## 实现思路
-
-Flutter 端采用以下分层：
-
-```text
-Practice 页面
-  -> PreparationController
-  -> SceneClient
-  -> WireSceneClient
-  -> HTTP API
-```
-
-Controller 负责页面状态和选择流程，页面不直接访问 HTTP。详情加载失败时会清空旧详情，避免使用过期数据继续开始练习。角色切换后会重新计算兼容的 PracticeOption，并清理失效的旧选项。
-
-服务端当前使用内存场景目录，保持服务端定义的场景顺序，后续可以替换为数据库或其他 Provider。
-
-## 影响范围
-
-- Flutter 场景选择页面和准备流程。
-- Go 场景只读接口。
-- 场景 OpenAPI 契约。
-
-不会影响：
-
-- 实时练习。
-- 音频和语音处理。
-- 练习回答提交。
-- 评分、复盘和练习报告。
-- 岗位准备、简历和练习计划。
-
-## 实际执行的验证
-
-```bash
-cd server
-gofmt -w internal/coaching/scene/scene.go internal/coaching/scene/scene_test.go internal/coaching/http.go internal/coaching/http_test.go
-go test ./...
-go vet ./...
-```
-
-结果：
-
-- `go test ./...` 通过。
-- `go vet ./...` 通过。
-- `git diff --check` 通过。
-
-## 未执行的验证
-
-以下命令未能执行，原因是当前环境未安装 Flutter 和 Dart SDK：
-
-```bash
-cd mobile
-flutter pub get
-dart format --output=none --set-exit-if-changed lib test
-flutter analyze
-flutter test
-```
-
-## 手工验证
-
-- 已通过 Go HTTP Handler 测试验证场景列表、场景详情、角色接口和不存在场景响应。
-- Flutter 页面尚未在模拟器或真机运行验证。
-
-## 已知限制
-
-- 服务端场景数据当前保存在内存中，尚未接入数据库。
-- 当前仓库环境没有 Flutter/Dart SDK，移动端测试和视觉验收需要在具备 Flutter 工具链的环境中补充。
-- 本 PR 只完成场景选择流程，不负责创建练习会话或进入实时练习。
-
-## 关联 Issue
-
-```text
-关联 #待填写
-```
-
-## AI 辅助说明
-
-本次代码实现使用 AI Coding 工具辅助完成。开发者已检查修改范围、接口契约、状态流程和测试结果，并确认本 PR 不包含实时语音、评分、复盘和岗位准备功能。
-
-## 提交前检查
-
-- [x] 未修改 `daily/`、`prompts/`、`docs/` 课程记录目录。
-- [x] 未提交密钥、Token、`.env`、缓存或构建产物。
-- [x] 未创建远程 Commit、Issue 或 PR。
-- [x] Go 格式化、测试和静态检查通过。
-- [ ] Flutter 格式化、分析和测试待安装 SDK 后执行。
-- [ ] 手工 Flutter 页面验收待完成。
-```
-
-推荐分支名：
-
-```text
-feature/<issue-number>-scene-selection
-```
-
-推荐 Commit：
-
-```text
-feat(coaching): implement scene selection flow
-```
-
-> 源头分支和目标分支分别是哪个
-
-- 源头分支：个人功能分支，例如 `feature/<issue-number>-scene-selection`
-- 目标分支：`main`
-
-例如 Issue 编号是 `12`：
-
-```text
-源头分支：feature/12-scene-selection
-目标分支：main
-```
-
-当前工作区仍在 `main`，尚未创建个人功能分支。
-
-> pr内容再给我一份，不要一部分md，一部分文本的
-
-```markdown
-# PR 标题
-
-feat(coaching): implement scene selection flow
-
-## 功能描述
-
-完成 Practice 场景选择最小流程：
-
-进入 Practice
--> 加载场景列表
--> 按练习类型展示场景
--> 查看场景详情
--> 选择用户角色
--> 选择练习模式
--> 生成完整场景选择结果
-
-## 变更内容
-
-1. 新增场景领域模型：
-
-   - `SceneDefinition`
-   - `RoleDefinition`
-   - `PracticeOption`
-   - `PracticeObjective`
-   - `SceneSelectionSnapshot`
-
-2. 新增场景 JSON Wire 编解码和 HTTP Client。
-
-3. 新增场景列表状态：
-
-   - 加载中
-   - 加载成功
-   - 空列表
-   - 请求失败
-   - 失败重试
-
-4. 新增场景详情加载和 `scene_id`、`scene_version` 校验。
-
-5. 新增角色选择和练习选项筛选。
-
-6. 角色切换后自动清理不兼容的旧练习选项。
-
-7. 未完成角色或练习模式选择时，开始按钮不可用。
-
-8. 新增 Practice 页面和 `/practice` 路由。
-
-9. 服务端实现以下场景接口：
-
-   - `GET /v1/scenes`
-   - `GET /v1/scenes/{scene_id}`
-   - `GET /v1/scenes/{scene_id}/roles`
-
-10. 新增场景 OpenAPI 接口契约。
-
-11. 新增 Flutter Controller 测试和 Go 服务端测试。
-
-12. 删除启动骨架中的重复 `SceneClient` 声明。
-
-## 实现思路
-
-Flutter 端采用以下分层：
-
-```text
-Practice 页面
-  -> PreparationController
-  -> SceneClient
-  -> WireSceneClient
-  -> HTTP API
-```
-
-页面不直接访问 HTTP。Controller 负责加载状态、详情校验、角色选择和练习模式筛选。
-
-详情请求失败时会清空旧详情，防止用户继续使用过期场景数据。角色切换后会重新计算兼容的练习选项，并清理失效的旧选择。
-
-服务端当前使用内存场景目录，并按照服务端定义的顺序返回场景。后续可以替换为数据库或其他 Provider。
-
-## 修改文件
-
-- `mobile/lib/main.dart`
-- `mobile/lib/app/app_routes.dart`
-- `mobile/lib/app/speak_up_app.dart`
-- `mobile/lib/features/coaching/coaching_clients.dart`
-- `mobile/lib/features/coaching/scene/`
-- `mobile/lib/features/coaching/preparation/`
-- `mobile/test/coaching/preparation/preparation_controller_test.dart`
-- `api/modules/scene.yaml`
-- `server/internal/coaching/http.go`
-- `server/internal/coaching/http_test.go`
-- `server/internal/coaching/scene/scene.go`
-- `server/internal/coaching/scene/scene_test.go`
-
-## 影响范围
-
-本 PR 影响：
-
-- Practice 场景列表。
-- Practice 场景详情。
-- 用户角色选择。
-- 练习目标展示。
-- 练习模式选择。
-- 进入后续准备流程前的场景选择结果。
-
-本 PR 不影响：
-
-- 实时问答。
-- 麦克风录音。
-- 语音转写和语音播放。
-- 练习中的回答提交。
-- 评分、复盘和练习报告。
-- 岗位 JD。
-- 简历上传。
-- 练习计划管理。
-
-## 实际执行的验证
-
-```bash
-cd server
-gofmt -w internal/coaching/scene/scene.go internal/coaching/scene/scene_test.go internal/coaching/http.go internal/coaching/http_test.go
-go test ./...
-go vet ./...
-```
-
-验证结果：
-
-- `go test ./...`：通过。
-- `go vet ./...`：通过。
-- `git diff --check`：通过。
-
-## 未执行的验证
-
-当前环境未安装 Flutter 和 Dart SDK，以下命令未执行成功：
-
-```bash
-cd mobile
-flutter pub get
-dart format --output=none --set-exit-if-changed lib test
-flutter analyze
-flutter test
-```
-
-原因：
-
-```text
-flutter: command not found
-dart: command not found
-```
-
-## 手工验证
-
-已通过 Go HTTP Handler 测试验证：
-
-- 场景列表接口。
-- 场景详情接口。
-- 角色列表接口。
-- 不存在场景的 `404` 响应。
-
-Flutter 页面尚未在模拟器或真机中进行手工验证。
-
-## 已知限制
-
-1. 服务端场景数据当前保存在内存中，尚未接入数据库。
-2. 当前环境缺少 Flutter/Dart SDK，移动端格式化、静态检查和测试需要在具备 Flutter 工具链的环境中补充。
-3. 本 PR 不创建练习会话，也不进入实时练习页面。
-4. 当前仅实现今天要求的场景选择最小流程。
-
-## 关联 Issue
-
-关联 Issue：`#待填写`
-
-## 分支信息
-
-源头分支：
-
-```text
-feature/<issue-number>-scene-selection
-```
-
-目标分支：
-
-```text
-main
-```
-
-## AI 辅助说明
-
-本次代码使用 AI Coding 工具辅助完成。开发者已检查修改范围、接口契约、状态流程和测试结果，确认本 PR 未实现实时语音、评分、复盘、岗位准备和练习计划功能。
-
-## 提交前检查
-
-- [x] 未修改 `daily/`、`prompts/`、`docs/` 课程记录目录。
-- [x] 未提交密钥、Token、`.env`、缓存或构建产物。
-- [x] 未创建远程 Commit、Issue 或 PR。
-- [x] Go 格式化、测试和静态检查已通过。
-- [ ] Flutter 格式化、静态检查和测试待安装 SDK 后执行。
-- [ ] Flutter 模拟器或真机手工验收待完成。
-```
-
-> 全部md格式给我
-
-# feat(coaching): implement scene selection flow
-
-## 功能描述
-
-完成 Practice 场景选择最小流程：
-
-进入 Practice
--> 加载场景列表
--> 按练习类型展示场景
--> 查看场景详情
--> 选择用户角色
--> 选择练习模式
--> 生成完整场景选择结果
-
-## 变更内容
-
-- 新增 `SceneDefinition`、`RoleDefinition`、`PracticeOption`、`PracticeObjective` 和 `SceneSelectionSnapshot` 模型。
-- 新增场景 JSON Wire 编解码和 HTTP Client。
-- 支持场景列表加载中、加载成功、空列表、请求失败和失败重试。
-- 新增场景详情加载和 `scene_id`、`scene_version` 校验。
-- 新增用户角色选择和练习选项筛选。
-- 角色切换后自动清理不兼容的练习选项。
-- 未完成角色或练习模式选择时，开始按钮不可用。
-- 新增 Practice 页面和 `/practice` 路由。
-- 实现以下服务端接口：
-  - `GET /v1/scenes`
-  - `GET /v1/scenes/{scene_id}`
-  - `GET /v1/scenes/{scene_id}/roles`
-- 新增场景 OpenAPI 接口契约。
-- 新增 Flutter Controller 测试和 Go 服务端测试。
-- 删除启动骨架中的重复 `SceneClient` 声明。
-
-## 实现思路
-
-Flutter 端采用以下分层：
-
-```text
-Practice 页面
-  -> PreparationController
-  -> SceneClient
-  -> WireSceneClient
-  -> HTTP API
-```
-
-页面不直接访问 HTTP。Controller 负责加载状态、详情校验、角色选择和练习模式筛选。
-
-详情请求失败时会清空旧详情，防止用户继续使用过期场景数据。角色切换后会重新计算兼容的练习选项，并清理失效的旧选择。
-
-服务端当前使用内存场景目录，并按照服务端定义的顺序返回场景。
-
-## 修改文件
-
-- `mobile/lib/main.dart`
-- `mobile/lib/app/app_routes.dart`
-- `mobile/lib/app/speak_up_app.dart`
-- `mobile/lib/features/coaching/coaching_clients.dart`
-- `mobile/lib/features/coaching/scene/`
-- `mobile/lib/features/coaching/preparation/`
-- `mobile/test/coaching/preparation/preparation_controller_test.dart`
-- `api/modules/scene.yaml`
-- `server/internal/coaching/http.go`
-- `server/internal/coaching/http_test.go`
-- `server/internal/coaching/scene/scene.go`
-- `server/internal/coaching/scene/scene_test.go`
-
-## 影响范围
-
-本 PR 影响：
-
-- Practice 场景列表。
-- Practice 场景详情。
-- 用户角色选择。
-- 练习目标展示。
-- 练习模式选择。
-- 进入后续准备流程前的场景选择结果。
-
-本 PR 不影响：
-
-- 实时问答。
-- 麦克风录音。
-- 语音转写和语音播放。
-- 练习中的回答提交。
-- 评分、复盘和练习报告。
-- 岗位 JD。
-- 简历上传。
-- 练习计划管理。
-
-## 实际执行的验证
-
-```bash
-cd server
-gofmt -w internal/coaching/scene/scene.go internal/coaching/scene/scene_test.go internal/coaching/http.go internal/coaching/http_test.go
-go test ./...
-go vet ./...
-```
-
-验证结果：
-
-- `go test ./...`：通过。
-- `go vet ./...`：通过。
-- `git diff --check`：通过。
-
-## 未执行的验证
-
-当前环境未安装 Flutter 和 Dart SDK，以下命令未执行成功：
-
-```bash
-cd mobile
-flutter pub get
-dart format --output=none --set-exit-if-changed lib test
-flutter analyze
-flutter test
-```
-
-原因：
-
-```text
-flutter: command not found
-dart: command not found
-```
-
-## 手工验证
-
-已通过 Go HTTP Handler 测试验证：
-
-- 场景列表接口。
-- 场景详情接口。
-- 角色列表接口。
-- 不存在场景的 `404` 响应。
-
-Flutter 页面尚未在模拟器或真机中进行手工验证。
-
-## 已知限制
-
-1. 服务端场景数据当前保存在内存中，尚未接入数据库。
-2. 当前环境缺少 Flutter/Dart SDK，移动端格式化、静态检查和测试需要在具备 Flutter 工具链的环境中补充。
-3. 本 PR 不创建练习会话，也不进入实时练习页面。
-4. 当前仅实现今天要求的场景选择最小流程。
-
-## 关联 Issue
-
-关联 Issue：`#待填写`
-
-## 分支信息
-
-源头分支：
-
-`feature/<issue-number>-scene-selection`
-
-目标分支：
-
-`main`
-
-## AI 辅助说明
-
-本次代码使用 AI Coding 工具辅助完成。开发者已检查修改范围、接口契约、状态流程和测试结果，确认本 PR 未实现实时语音、评分、复盘、岗位准备和练习计划功能。
-
-## 提交前检查
-
-- [x] 未修改 `daily/`、`prompts/`、`docs/` 课程记录目录。
-- [x] 未提交密钥、Token、`.env`、缓存或构建产物。
-- [x] 未创建远程 Commit、Issue 或 PR。
-- [x] Go 格式化、测试和静态检查已通过。
-- [ ] Flutter 格式化、静态检查和测试待安装 SDK 后执行。
-- [ ] Flutter 模拟器或真机手工验收待完成。
-
-> 直接生成pr的md文档给我
-
-已生成 PR Markdown 文档：
-
-[下载 pr-scene-selection.md](./outputs/pr-scene-selection.md)
+1. 对话体验自然
+2. 语音识别准确
+3. 纠错结果可靠
+4. 反馈足够简单
+5. 能根据用户水平调整难度
+6. 能让用户持续复习和练习
