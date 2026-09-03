@@ -13,6 +13,7 @@ stages:
     golangVersion: "1.22"
     commands:
     - cd server
+    - go env -w GOPROXY=https://goproxy.cn,direct GOSUMDB=sum.golang.google.cn
     - go mod download
     - go test ./... "-coverprofile=coverage.out"
     - go tool cover "-func=coverage.out"
@@ -25,6 +26,10 @@ stages:
       retry: "0"
 triggers:
   push:
+    branches:
+      include:
+      - '.*'
+  pr:
     branches:
       include:
       - '.*'
