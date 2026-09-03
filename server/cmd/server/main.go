@@ -3,12 +3,14 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/gangcaiyoule/ai-speak/server/internal/agent"
-	"github.com/gangcaiyoule/ai-speak/server/internal/coaching"
-	"github.com/gangcaiyoule/ai-speak/server/internal/identity"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/gangcaiyoule/ai-speak/server/internal/agent"
+	"github.com/gangcaiyoule/ai-speak/server/internal/coaching"
+	"github.com/gangcaiyoule/ai-speak/server/internal/identity"
+	"github.com/gangcaiyoule/ai-speak/server/internal/voiceecho"
 )
 
 // HealthResponse is the response returned by the health endpoint.
@@ -29,6 +31,7 @@ func buildRouter() http.Handler {
 	identity.NewHTTPHandler(identity.StubAuthService{}).RegisterRoutes(mux)
 	agent.NewHTTPHandler(agent.StubService{}).RegisterRoutes(mux)
 	coaching.NewHTTPHandler().RegisterRoutes(mux)
+	mux.Handle("GET /ws/voice/echo", voiceecho.NewWSSHandler())
 	return mux
 }
 
