@@ -61,6 +61,30 @@ go test ./...
 - `flutter analyze`：No issues found
 - `flutter test`：21 个用例全部通过（ring_buffer / session 状态机）
 
+## 编译验证方式
+
+`mobile/` 目前只有 `lib/` 和 `test/`，没有平台目录，因此没有直接的 `flutter build` 目标。验证完整编译采用临时工程法（不改动仓库文件）：
+
+```bash
+rm -rf /tmp/build_check
+flutter create --project-name ai_speak --platforms linux /tmp/build_check
+cp -r /workspaces/ai-speak/mobile/lib /tmp/build_check/
+cp /workspaces/ai-speak/mobile/pubspec.yaml /tmp/build_check/
+cd /tmp/build_check && flutter pub get && flutter build linux --release
+```
+
+Linux 桌面构建依赖需先在机器上安装（当前 Codespace 已装）：
+
+```bash
+sudo apt-get install -y --no-install-recommends \
+  clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+```
+
+## 2026-09-03 编译结果
+
+- `flutter build linux --release`：✓ Built `build/linux/x64/release/bundle/ai_speak`
+- 产物 bundle 约 21M（含引擎 so、icudtl.dat、应用二进制 24K）
+
 ## 踩坑记录
 
 - 不要在 `onCreateCommand` 里现场 `git clone` Flutter SDK：创建阶段耗时过长会触发平台诊断刷屏甚至卡死。SDK 必须打进镜像。
