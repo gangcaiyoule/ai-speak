@@ -1,0 +1,36 @@
+version: "1.0"
+name: ai-speak-go-ci
+displayName: ai-speak-go-ci
+stages:
+- name: Go 检查
+  displayName: Go 检查
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: build@golang
+    name: go-checks
+    displayName: Go 测试、检查与构建
+    golangVersion: "1.22"
+    commands:
+    - cd server
+    - go env -w GOPROXY=https://goproxy.cn,direct GOSUMDB=sum.golang.google.cn
+    - go mod download
+    - go test ./... "-coverprofile=coverage.out"
+    - go tool cover "-func=coverage.out"
+    - go vet ./...
+    - go build ./...
+    caches:
+    - /go/pkg/mod
+    notify: []
+    strategy:
+      retry: "0"
+triggers:
+  push:
+    branches:
+      include:
+      - '.*'
+  pr:
+    branches:
+      include:
+      - '.*'
+notify: []

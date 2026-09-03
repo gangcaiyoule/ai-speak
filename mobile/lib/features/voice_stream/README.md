@@ -128,4 +128,4 @@ C 层用各端单元测试入口回归；真机项（R4/R5/R7/R8）以实测延�
 注释统一 Doxygen 风格：Dart 用 `/// @brief` / `@param` / `@return` /
 `@note`，成员行内注释用 `///<`；C 层实现沿用同一套标签（`@file` /
 `@brief` / `@param` / `@return`）。接口语义变更时同步更新
-`docs/24320106/voice-stream-interfaces.md`。
+`docs/interfaces.md`（本模块目录内，`mobile/lib/features/voice_stream/docs/interfaces.md`）。

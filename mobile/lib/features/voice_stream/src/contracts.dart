@@ -44,7 +44,7 @@ class AudioFormat {
 /// @brief 帧头 flags 标志位定义。
 ///
 /// 位定义随切帧器（R3）落地固定，见模块 README 第 3 节与
-/// docs/24320106/voice-stream-interfaces.md 第 7 节。
+/// docs/interfaces.md 第 7 节（与本文件同在 voice_stream 模块目录下）。
 abstract final class AudioFrameFlags {
   /// @brief 无标志。
   static const int none = 0x0000;
