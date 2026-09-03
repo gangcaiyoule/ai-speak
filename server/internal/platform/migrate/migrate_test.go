@@ -5,36 +5,40 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
-type fakeDB struct {
-	applied    map[int]bool
-	statements []string
-	fail       bool
+type fakeStore struct {
+	applied []int
+	fail    bool
 }
 
-func (d *fakeDB) AppliedMigrations(context.Context) (map[int]bool, error) { return d.applied, nil }
-func (d *fakeDB) ExecContext(_ context.Context, q string, _ ...any) error {
-	d.statements = append(d.statements, q)
-	if d.fail {
+func (*fakeStore) Prepare(context.Context) error { return nil }
+func (*fakeStore) AppliedVersions(context.Context) (map[int]bool, error) {
+	return map[int]bool{1: true}, nil
+}
+func (s *fakeStore) Apply(_ context.Context, m Migration) error {
+	if s.fail {
 		return errors.New("database unavailable")
 	}
+	s.applied = append(s.applied, m.Version)
 	return nil
 }
-func TestRunnerSortsAndSkipsApplied(t *testing.T) {
-	d := &fakeDB{applied: map[int]bool{1: true}}
-	err := (Runner{Migrations: []Migration{{2, "second", "SQL2"}, {1, "first", "SQL1"}}}).Run(context.Background(), d)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(d.statements) != 2 || !strings.Contains(d.statements[1], "schema_migrations") {
-		t.Fatalf("statements=%v", d.statements)
+func TestLoadSorts(t *testing.T) {
+	m, e := Load(fstest.MapFS{"0002_second.sql": {Data: []byte("SQL2")}, "0001_first.sql": {Data: []byte("SQL1")}})
+	if e != nil || len(m) != 2 || m[0].Version != 1 {
+		t.Fatalf("m=%v e=%v", m, e)
 	}
 }
-func TestRunnerReportsFailure(t *testing.T) {
-	d := &fakeDB{applied: map[int]bool{}, fail: true}
-	err := (Runner{Migrations: []Migration{{1, "first", "SQL1"}}}).Run(context.Background(), d)
-	if err == nil || !strings.Contains(err.Error(), "apply migration 1") {
-		t.Fatalf("err=%v", err)
+func TestRunSkipsApplied(t *testing.T) {
+	s := &fakeStore{}
+	if e := Run(context.Background(), s, []Migration{{1, "first", "SQL1"}, {2, "second", "SQL2"}}); e != nil || len(s.applied) != 1 || s.applied[0] != 2 {
+		t.Fatalf("s=%v e=%v", s, e)
+	}
+}
+func TestRunFailure(t *testing.T) {
+	e := Run(context.Background(), &fakeStore{fail: true}, []Migration{{2, "broken", "SQL"}})
+	if e == nil || !strings.Contains(e.Error(), "0002_broken") {
+		t.Fatal(e)
 	}
 }

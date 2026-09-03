@@ -1,9 +1,33 @@
 // Package main provides the local database migration entry point.
 package main
 
-import "log"
+import (
+	"context"
+	"database/sql"
+	"log"
+	"os"
 
-// main is the migration command entry point. Database wiring is supplied by the next storage PR.
+	_ "github.com/lib/pq"
+
+	"github.com/gangcaiyoule/ai-speak/server/internal/platform/migrate"
+)
+
 func main() {
-	log.Println("database migration runner is ready; configure a PostgreSQL adapter before execution")
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		log.Fatal("DATABASE_URL is required")
+	}
+	db, err := sql.Open("postgres", databaseURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	migrations, err := migrate.Load(os.DirFS("migrations"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := migrate.Run(context.Background(), migrate.PostgresStore{DB: db}, migrations); err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("migration complete: %d files available", len(migrations))
 }
