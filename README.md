@@ -31,3 +31,16 @@ flutter run
 ```
 
 当前只提供接口和启动骨架，业务实现将在后续 Issue 中逐步增加。
+
+## 身份接口
+
+当前版本提供最小注册登录闭环，服务端使用线程安全内存仓库；重启服务会清空测试账号和会话。
+
+```text
+POST /v1/auth/register  {"email":"user@example.com","password":"password123"}
+POST /v1/auth/login     {"email":"user@example.com","password":"password123"}
+GET  /v1/me             Authorization: Bearer <token>
+POST /v1/auth/logout    Authorization: Bearer <token>
+```
+
+密码以 Argon2id 哈希保存，会话只保存 Token 摘要。Flutter 端使用 `flutter_secure_storage` 保存当前会话 Token。

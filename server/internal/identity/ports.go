@@ -8,6 +8,10 @@ type UserRepository interface {
 	Create(ctx context.Context, user User) (User, error)
 	// FindByID 按用户标识读取用户。
 	FindByID(ctx context.Context, id string) (User, error)
+	// CreateWithPasswordHash 保存用户及其密码哈希。
+	CreateWithPasswordHash(ctx context.Context, user StoredUser) (User, error)
+	// FindByEmailWithPasswordHash 按邮箱读取用户凭据。
+	FindByEmailWithPasswordHash(ctx context.Context, email string) (StoredUser, error)
 }
 
 // SessionRepository 定义保存和删除登录会话的能力。
@@ -16,6 +20,8 @@ type SessionRepository interface {
 	Create(ctx context.Context, session Session) (Session, error)
 	// Delete 删除指定会话。
 	Delete(ctx context.Context, id string) error
+	// FindByTokenDigest 按令牌摘要读取有效会话。
+	FindByTokenDigest(ctx context.Context, digest string) (Session, error)
 }
 
 // AuthService 定义注册、登录、退出和获取当前用户的用例。

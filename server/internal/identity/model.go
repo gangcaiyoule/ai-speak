@@ -25,3 +25,9 @@ type LoginInput struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
+
+// StoredUser 是服务端内部保存的用户凭据，不向 HTTP 响应暴露密码哈希。
+type StoredUser struct {
+	User         User
+	PasswordHash string
+}
