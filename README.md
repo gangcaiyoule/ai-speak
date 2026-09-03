@@ -29,5 +29,3 @@ cd mobile
 flutter pub get
 flutter run
 ```
-
-当前只提供接口和启动骨架，业务实现将在后续 Issue 中逐步增加。
