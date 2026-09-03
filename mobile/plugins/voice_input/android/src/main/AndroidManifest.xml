@@ -1,0 +1,4 @@
+<!-- voice_input：麦克风采集权限（R4）。运行时权限申请由 App 层负责（R8 装配）。 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+</manifest>

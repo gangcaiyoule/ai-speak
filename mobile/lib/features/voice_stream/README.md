@@ -45,8 +45,13 @@ Dart 参考实现 `src/ring_buffer.dart` 与 C 实现语义逐条对齐，并以
 uint32 seq; uint32 timestamp_ms; uint16 size; uint16 flags;
 ```
 
-`flags` 标记丢帧空洞（上游 drop 后 seq 跳号，服务端据此估算丢包率）。
-切帧器是纯函数式组件，可单测。
+`flags` 标记丢帧空洞：上游（环缓丢旧/采集断流）drop 后由切帧器把
+`gapBefore = 0x0001` 打在下一帧上；与 seq 跳号互为补充——跳号是接收方
+被动观测，本位是发送方主动标记，服务端据此估算丢包率。
+
+R3 已实现 `src/frame_slicer.dart`：`FrameSlicer`（纯 Dart 切帧，`push`/
+`drain`/`flush`/`markGap`，`drain` 直接接环形缓冲出口并同步成对
+peek/advance）与 `FrameHeaderCodec`（帧头小端序编解码）。
 
 ## 4. 传输
 
@@ -79,14 +84,36 @@ AudioTransport sendFrame(frame)；events: Stream<TransportEvent>（识别/评测
 
 平台实现各自挂到这三个接口后面，UI/控制器只依赖接口。
 
+### 5.1 会话层（v0.2 新增，参照上游已验证语义）
+
+`src/session.dart` 在 `AudioTransport` 之上叠加会话层，语义参照原仓库
+XE3-ESL 的 `speakup.voice-input.v1`（start/finish/cancel 控制帧、幂等键、
+partial/final 区分、kind+retryable 失败模型），但只定义抽象，不绑定传输栈：
+
+- **生命周期**：`idle → active → (finish → 等终态 | cancel) → closed`。
+  `finish()` 是优雅结束（等服务端 final/failed 终态事件），
+  `cancel()` 是立即中断；终态后不可复用，重试须新开会话。
+- **幂等键**：`VoiceSessionConfig.idempotencyKey`（8–128 字符、首尾无空白），
+  同一逻辑会话跨重连重试保持不变，服务端据此去重。
+- **事件模型**：`SessionStarted / SessionPartial / SessionFinal /
+  SessionFailed(kind, retryable) / SessionStats`。`retryable=true` 时
+  可用同一幂等键重开；传输映射细节由 R6 的 WSS 实现完成。
+
+`AudioTransport` 原契约不变——不破已有用户空间；`VoiceSessionLifecycle`
+状态机是纯 Dart 组件，实现层组合复用，语义由单测固定。
+
 ## 6. 路线图（直接上手，不设 smoke test）
 
-- R1 接口抽象 + Dart 参考环形缓冲 + 单测（本轮）
-- R2 C 版 SPSC 环形缓冲（NDK/Xcode 双端编译），对齐 R1 用例
-- R3 切帧器（纯 Dart + 单测），接在缓冲出口
-- R4 Android Oboe 输入流写缓冲，真机验延迟（回环时间戳法）
-- R5 iOS RemoteIO 输入流 + ObjC++ 会话壳
-- R6 回包链路：WSS echo（或 Pion 回声）打通协议，再接真实云服务
+- R1 ✅ 接口抽象 + Dart 参考环形缓冲 + 单测
+- R2 ✅ C 版 SPSC 环形缓冲（header-only，NDK/Xcode 双端编译），语义对齐 R1
+- R3 ✅ 切帧器（纯 Dart + 单测）+ 帧头编解码，接在缓冲出口
+- R4 ◐ Android Oboe 输入流已落地（`plugins/voice_input` + 共享 C ABI
+  `native/voice_input.h`）；真机验延迟（回环时间戳法）待 R8
+- R5 ◐ iOS RemoteIO 输入流 + ObjC++ 会话壳已落地（同一 C ABI）；
+  需 mac + 真机编译验证
+- R6 ✅ 回包链路：WSS echo 打通协议（客户端 `WssEchoTransport` +
+  会话适配 `TransportVoiceSession`；服务端 `/ws/voice/echo`）；
+  真实云服务接入另行推进
 - R7 AudioSink 播放路径（Oboe 输出流），欠载策略与丢帧统计
 - R8 端到端联调：弱网（丢包/延迟注入）下验证传输方案选型与缓冲预算
 
@@ -101,4 +128,4 @@ C 层用各端单元测试入口回归；真机项（R4/R5/R7/R8）以实测延�
 注释统一 Doxygen 风格：Dart 用 `/// @brief` / `@param` / `@return` /
 `@note`，成员行内注释用 `///<`；C 层实现沿用同一套标签（`@file` /
 `@brief` / `@param` / `@return`）。接口语义变更时同步更新
-`docs/24320106/voice-stream-interfaces.md`。
+`docs/interfaces.md`（本模块目录内，`mobile/lib/features/voice_stream/docs/interfaces.md`）。

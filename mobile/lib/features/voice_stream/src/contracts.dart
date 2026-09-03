@@ -41,6 +41,21 @@ class AudioFormat {
   }
 }
 
+/// @brief 帧头 flags 标志位定义。
+///
+/// 位定义随切帧器（R3）落地固定，见模块 README 第 3 节与
+/// docs/interfaces.md 第 7 节（与本文件同在 voice_stream 模块目录下）。
+abstract final class AudioFrameFlags {
+  /// @brief 无标志。
+  static const int none = 0x0000;
+
+  /// @brief 本帧之前存在丢帧空洞。
+  ///
+  /// 上游（环形缓冲丢旧/采集断流）丢弃数据后由切帧器打在下一帧上；
+  /// 与 seq 跳号互为补充：跳号是接收方被动观测，本位是发送方主动标记。
+  static const int gapBefore = 0x0001;
+}
+
 /// @brief 一帧定长 PCM 音频。
 ///
 /// 是贯穿采集、传输、播放的统一数据单元。
@@ -50,10 +65,12 @@ class AudioFrame {
   /// @param seq 单调递增帧序号；跳号即表示上游丢帧。
   /// @param timestampMs 采集时刻的毫秒时间戳，用于端到端延迟测量。
   /// @param samples PCM 样本（16 位小端，交错排布）。
+  /// @param flags 标志位（见 [AudioFrameFlags]）；缺省无标志，既有调用不受影响。
   const AudioFrame({
     required this.seq,
     required this.timestampMs,
     required this.samples,
+    this.flags = AudioFrameFlags.none,
   });
 
   /// @brief 单调递增的帧序号；跳号即表示上游丢帧。
@@ -64,6 +81,9 @@ class AudioFrame {
 
   /// @brief PCM 样本（16 位小端，交错排布）。
   final Uint8List samples;
+
+  /// @brief 标志位，见 [AudioFrameFlags]；缺省 0（无标志）。
+  final int flags;
 }
 
 /// @brief 采集端契约：把麦克风抽象为可随时中断的帧流。
@@ -140,6 +160,21 @@ class TransportStats extends TransportEvent {
   final int bufferedBytes;
 }
 
+/// @brief 服务端回传的音频帧（回声链路、合成语音等二进制回包）。
+///
+/// @note 与 [TransportMessage] 互补：二进制回包走本事件，JSON 文本结果走
+///       [TransportMessage]；会话层不消费本事件，播放/UI 直接订阅
+///       [AudioTransport.events]。
+class TransportAudioFrame extends TransportEvent {
+  /// @brief 构造回传音频帧事件。
+  ///
+  /// @param frame 服务端回传的音频帧（含帧头解析出的 seq/timestampMs/flags）。
+  const TransportAudioFrame(this.frame);
+
+  /// @brief 服务端回传的音频帧。
+  final AudioFrame frame;
+}
+
 /// @brief 上行传输契约：音频帧外发 + 服务端事件回流。
 ///
 /// 传输栈（WSS / WebRTC）是接口后的可替换件。
@@ -158,4 +193,16 @@ abstract interface class AudioTransport {
   ///
   /// @return 关闭完成时 future 完成。
   Future<void> close();
+}
+
+/// @brief 支持文本控制帧的传输契约（[VoiceSession] 会话层的最小要求）。
+///
+/// 会话层的 begin/finish/cancel 控制需要文本通道；纯音频的
+/// [AudioTransport] 无法承载。R6 的 WSS 回声实现同时满足两个契约；
+/// 接入真实云服务时其协议实现同样需要提供文本通道。
+abstract interface class TextCapableTransport implements AudioTransport {
+  /// @brief 发送一条文本控制/消息帧，非阻塞。
+  ///
+  /// @param payload JSON 文本。
+  void sendText(String payload);
 }

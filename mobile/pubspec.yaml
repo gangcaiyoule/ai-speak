@@ -10,6 +10,9 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_secure_storage: ^9.2.2
+  voice_input:
+    path: plugins/voice_input
+  web_socket_channel: ^3.0.0
 
 dev_dependencies:
   flutter_test:
