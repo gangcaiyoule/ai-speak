@@ -1,5 +1,6 @@
 # ai-speak
 
+
 最小本地运行骨架：Flutter 客户端、Go HTTP Server 和 PostgreSQL。
 
 ## 启动 PostgreSQL
