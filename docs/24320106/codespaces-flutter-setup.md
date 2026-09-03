@@ -91,3 +91,10 @@ sudo apt-get install -y --no-install-recommends \
 - 自定义镜像需要显式加入 `ghcr.io/devcontainers/features/sshd:1`，否则 `gh codespace ssh` 报 "failed to start SSH server"。
 - 配置改动后需在 Codespace 内 `git pull` 再 `Rebuild Container` 才生效。
 - 预构建（prebuild）是可选的镜像缓存加速，不是创建 Codespace 的必要条件；卡在 Uploading 时可直接选择无预构建创建。
+- Windows 本机新版 OpenSSH 与 `gh codespace cp` 不兼容（报 "dest open ... No such file or directory"，即使远端路径存在）：需强制旧 scp 协议，加 `-- -O`，如 `gh codespace cp -c <机器名> -- -O 本地文件 remote:远端文件`；前缀用 `remote:`（本机 gh 版本不认 `cpsc:`）。
+
+## 2026-09-03 R3 验证结果
+
+- 改动文件经 `gh codespace cp` 拷入后执行（本机无 Flutter/Docker/WSL）：
+- `flutter analyze`：No issues found
+- `flutter test`：32 个用例全部通过（ring_buffer 9 / session 12 / frame_slicer 11）
