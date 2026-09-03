@@ -1,6 +1,8 @@
 {
   "name": "ai-speak-flutter",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
   "features": {
     "ghcr.io/devcontainers/features/go:1": {
       "version": "1.22"
@@ -9,14 +11,16 @@
   "remoteEnv": {
     "PATH": "/opt/flutter/bin:${containerEnv:PATH}"
   },
-  "onCreateCommand": "echo 'skip auto flutter install; run bash .devcontainer/setup-flutter.sh manually after boot'",
-  "postCreateCommand": "echo 'codespace ready; run: bash .devcontainer/setup-flutter.sh && cd mobile && flutter pub get'",
+  "postCreateCommand": "cd mobile && flutter pub get",
   "customizations": {
     "vscode": {
       "extensions": [
         "Dart-Code.dart-code",
         "Dart-Code.flutter"
-      ]
+      ],
+      "settings": {
+        "dart.flutterSdkPath": "/opt/flutter"
+      }
     }
   }
 }
