@@ -81,7 +81,7 @@ class TransportVoiceSession implements VoiceSession {
       await ready();
     }
     if (!_lifecycle.isClosed) {
-      _events.add(SessionStarted());
+      _events.add(const SessionStarted());
     }
   }
 

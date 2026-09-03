@@ -7,7 +7,7 @@ void main() {
     test('合法幂等键通过校验', () {
       final config = VoiceSessionConfig(
         idempotencyKey: 'session-20260902-a1',
-        format: AudioFormat(sampleRateHz: 16000, channelCount: 1, bitsPerSample: 16),
+        format: const AudioFormat(sampleRateHz: 16000, channelCount: 1, bitsPerSample: 16),
       );
       expect(config.idempotencyKey, 'session-20260902-a1');
     });
@@ -16,7 +16,7 @@ void main() {
       expect(
         () => VoiceSessionConfig(
           idempotencyKey: 'short',
-          format: AudioFormat(sampleRateHz: 16000, channelCount: 1, bitsPerSample: 16),
+          format: const AudioFormat(sampleRateHz: 16000, channelCount: 1, bitsPerSample: 16),
         ),
         throwsArgumentError,
       );
@@ -26,7 +26,7 @@ void main() {
       expect(
         () => VoiceSessionConfig(
           idempotencyKey: 'k' * 129,
-          format: AudioFormat(sampleRateHz: 16000, channelCount: 1, bitsPerSample: 16),
+          format: const AudioFormat(sampleRateHz: 16000, channelCount: 1, bitsPerSample: 16),
         ),
         throwsArgumentError,
       );
@@ -36,7 +36,7 @@ void main() {
       expect(
         () => VoiceSessionConfig(
           idempotencyKey: ' session-key-01 ',
-          format: AudioFormat(sampleRateHz: 16000, channelCount: 1, bitsPerSample: 16),
+          format: const AudioFormat(sampleRateHz: 16000, channelCount: 1, bitsPerSample: 16),
         ),
         throwsArgumentError,
       );

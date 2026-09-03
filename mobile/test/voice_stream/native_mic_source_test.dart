@@ -92,18 +92,31 @@ void main() {
         drainInterval: const Duration(milliseconds: 1),
       );
 
+      final frames = <AudioFrame>[];
+      final first = Completer<void>();
+      final second = Completer<void>();
+      final sub = source.start(_format, 20).listen((frame) {
+        frames.add(frame);
+        if (frames.length == 1 && !first.isCompleted) {
+          first.complete();
+        }
+        if (frames.length == 2 && !second.isCompleted) {
+          second.complete();
+        }
+      });
+
       bindings.enqueue(640, 1);
-      bindings.dropped = 640; // 模拟环缓丢了一整帧。
+      await first.future.timeout(const Duration(seconds: 5));
+      expect(frames[0].flags, AudioFrameFlags.none);
+
+      bindings.dropped = 640; // 基线建立后模拟环缓丢一整帧。
       bindings.enqueue(640, 2);
+      await second.future.timeout(const Duration(seconds: 5));
 
-      final frames =
-          await source.start(_format, 20).take(2).timeout(
-                const Duration(seconds: 5),
-              ).toList();
+      expect(frames[1].flags, AudioFrameFlags.gapBefore);
+      expect(frames[1].seq, 1);
 
-      expect(frames[0].flags, AudioFrameFlags.gapBefore);
-      expect(frames[1].flags, AudioFrameFlags.none); // 只标一帧。
-
+      await sub.cancel();
       await source.stop();
     });
 

@@ -75,7 +75,9 @@ class NativeMicSource implements MicSource {
     final controller = _controller;
     _controller = null;
     _bindings.stop(); // 幂等。
-    await controller?.close();
+    // 关闭帧流：有监听者则收到 done；无监听时 close 的 done 无从派发，
+    // 不能阻塞 stop（否则从未订阅就 stop 的调用会永远挂起）。
+    unawaited(controller?.close());
   }
 
   /// @brief 内部：周期出口——gap 检查 → 拷贝读 → 切帧 → 发流。

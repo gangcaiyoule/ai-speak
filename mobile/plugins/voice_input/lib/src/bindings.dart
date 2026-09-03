@@ -146,7 +146,7 @@ final class FfiVoiceInputBindings implements VoiceInputBindings {
   ({int sampleRateHz, int channelCount, int bitsPerSample})?
       negotiatedFormat() {
     final out = _formatOut ??= malloc<Int32>(3);
-    final code = _viFormat(out, out.elementAt(1), out.elementAt(2));
+    final code = _viFormat(out, out + 1, out + 2);
     if (code != 0 || out[0] == 0) {
       return null;
     }
