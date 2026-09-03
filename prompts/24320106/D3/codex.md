@@ -24,6 +24,7 @@
 > - Ran `Get-Content -Raw -Encoding UTF8 server/cmd/server/main.go; Get-Content -Raw -Encoding UTF8 server/go.mod; Get-Content -Raw -Encoding UTF8 mobile/lib/identity/identity_client.dart; Get-Content -Raw -Encoding UTF8 mobile/lib/main.dart; Get-Content -Raw -Encoding UTF8 mobile/lib/app/speak_up_app.dart`
 > - Ran `Get-Content -Raw -Encoding UTF8 server/internal/identity/http_test.go; Get-Content -Raw -Encoding UTF8 server/cmd/server/main_test.go; Get-Content -Raw -Encoding UTF8 README.md`
 >
+
 > </details>
 >
 > 代码对照后有两个很明确的“先改方案再开工”的问题：当前身份接口仍把注册定义成“创建会话”，而文档又要求注册不登录；另外现有 Repository 接口没有凭据、Token 摘要和鉴权查询能力，按现状直接进入阶段一，阶段二很可能要重写接口。我会把这些和其他建议按优先级整理出来。
