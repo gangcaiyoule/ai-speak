@@ -104,12 +104,16 @@ partial/final 区分、kind+retryable 失败模型），但只定义抽象，不
 
 ## 6. 路线图（直接上手，不设 smoke test）
 
-- R1 接口抽象 + Dart 参考环形缓冲 + 单测（本轮）
-- R2 C 版 SPSC 环形缓冲（NDK/Xcode 双端编译），对齐 R1 用例
-- R3 切帧器（纯 Dart + 单测），接在缓冲出口
-- R4 Android Oboe 输入流写缓冲，真机验延迟（回环时间戳法）
-- R5 iOS RemoteIO 输入流 + ObjC++ 会话壳
-- R6 回包链路：WSS echo（或 Pion 回声）打通协议，再接真实云服务
+- R1 ✅ 接口抽象 + Dart 参考环形缓冲 + 单测
+- R2 ✅ C 版 SPSC 环形缓冲（header-only，NDK/Xcode 双端编译），语义对齐 R1
+- R3 ✅ 切帧器（纯 Dart + 单测）+ 帧头编解码，接在缓冲出口
+- R4 ◐ Android Oboe 输入流已落地（`plugins/voice_input` + 共享 C ABI
+  `native/voice_input.h`）；真机验延迟（回环时间戳法）待 R8
+- R5 ◐ iOS RemoteIO 输入流 + ObjC++ 会话壳已落地（同一 C ABI）；
+  需 mac + 真机编译验证
+- R6 ✅ 回包链路：WSS echo 打通协议（客户端 `WssEchoTransport` +
+  会话适配 `TransportVoiceSession`；服务端 `/ws/voice/echo`）；
+  真实云服务接入另行推进
 - R7 AudioSink 播放路径（Oboe 输出流），欠载策略与丢帧统计
 - R8 端到端联调：弱网（丢包/延迟注入）下验证传输方案选型与缓冲预算
 
