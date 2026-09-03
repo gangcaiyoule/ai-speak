@@ -95,6 +95,8 @@ sudo apt-get install -y --no-install-recommends \
 
 ## 2026-09-03 R3 验证结果
 
-- 改动文件经 `gh codespace cp` 拷入后执行（本机无 Flutter/Docker/WSL）：
+- 流程：本地提交并 `git push fork dev/voice_stream` → `gh codespace ssh`
+  内 `git pull --ff-only` → 在 `/workspaces/ai-speak/mobile` 执行
+  （本机无 Flutter/Docker/WSL）：
 - `flutter analyze`：No issues found
 - `flutter test`：32 个用例全部通过（ring_buffer 9 / session 12 / frame_slicer 11）
