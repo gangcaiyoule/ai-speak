@@ -207,8 +207,9 @@ void main() {
       await session.cancel();
 
       await closed.future.timeout(const Duration(seconds: 2));
-      expect(transport.texts, hasLength(1)); // 只有 start，无 finish。
-      expect(transport.texts.single, contains('"type":"start"'));
+      expect(transport.texts, hasLength(2)); // start + cancel，无 finish。
+      expect(transport.texts.first, contains('"type":"start"'));
+      expect(transport.texts.last, contains('"type":"cancel"'));
       await sub.cancel();
     });
   });

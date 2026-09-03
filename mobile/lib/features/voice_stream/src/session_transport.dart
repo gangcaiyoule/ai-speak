@@ -100,10 +100,11 @@ class TransportVoiceSession implements VoiceSession {
     final waiter = _finishWaiter = Completer<void>();
     var timedOut = false;
     final timer = Timer(finishTimeout, () {
-      timedOut = true;
-      if (!waiter.isCompleted) {
-        waiter.complete(_fail('finish-timeout'));
+      if (waiter.isCompleted) {
+        return;
       }
+      timedOut = true;
+      unawaited(_fail('finish-timeout')); // _fail 内部会完成 waiter。
     });
     try {
       await waiter.future;
@@ -114,12 +115,15 @@ class TransportVoiceSession implements VoiceSession {
       return; // _fail 已进入 closed 并关闭事件流。
     }
     await _teardownTransport();
-    _events.add(SessionStats(
-      sentFrames: _lastStats?.sentFrames ?? 0,
-      droppedFrames: _lastStats?.droppedFrames ?? 0,
-      bufferedBytes: _lastStats?.bufferedBytes ?? 0,
-    ));
-    await _events.close();
+    if (!_events.isClosed) {
+      final stats = _lastStats;
+      _events.add(SessionStats(
+        sentFrames: stats?.sentFrames ?? 0,
+        droppedFrames: stats?.droppedFrames ?? 0,
+        bufferedBytes: stats?.bufferedBytes ?? 0,
+      ));
+      await _events.close();
+    }
   }
 
   @override
@@ -184,8 +188,9 @@ class TransportVoiceSession implements VoiceSession {
   Future<void> _fail(String kind) async {
     _events.add(SessionFailed(kind: kind, retryable: true));
     _lifecycle.abort();
-    if (_finishWaiter?.isCompleted != true) {
-      _finishWaiter!.complete();
+    final waiter = _finishWaiter;
+    if (waiter != null && !waiter.isCompleted) {
+      waiter.complete();
     }
     await _teardownTransport();
     await _events.close();
