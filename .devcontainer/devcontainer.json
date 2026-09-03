@@ -1,0 +1,27 @@
+{
+  "name": "ai-speak-flutter",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.22"
+    }
+  },
+  "remoteEnv": {
+    "PATH": "/opt/flutter/bin:${containerEnv:PATH}"
+  },
+  "onCreateCommand": "bash .devcontainer/setup-flutter.sh",
+  "postCreateCommand": "flutter --version && cd mobile && flutter pub get && flutter analyze && flutter test",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Dart-Code.dart-code",
+        "Dart-Code.flutter"
+      ]
+    }
+  },
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  }
+}
