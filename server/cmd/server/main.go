@@ -28,7 +28,13 @@ func healthHandler(writer http.ResponseWriter, _ *http.Request) {
 func buildRouter() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
-	identity.NewHTTPHandler(identity.StubAuthService{}).RegisterRoutes(mux)
+	users := identity.NewMemoryRepository()
+	sessions := identity.NewMemorySessionRepository(users)
+	auth, err := identity.NewService(users, sessions)
+	if err != nil {
+		panic(err)
+	}
+	identity.NewHTTPHandler(auth).RegisterRoutes(mux)
 	agent.NewHTTPHandler(agent.StubService{}).RegisterRoutes(mux)
 	coaching.NewHTTPHandler().RegisterRoutes(mux)
 	mux.Handle("GET /ws/voice/echo", voiceecho.NewWSSHandler())
