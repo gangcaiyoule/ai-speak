@@ -3,7 +3,7 @@ package main
 
 import "log"
 
-// main runs the placeholder migration command until schema migrations exist.
+// main is the migration command entry point. Database wiring is supplied by the next storage PR.
 func main() {
-	log.Println("database migration placeholder: no migrations defined")
+	log.Println("database migration runner is ready; configure a PostgreSQL adapter before execution")
 }
