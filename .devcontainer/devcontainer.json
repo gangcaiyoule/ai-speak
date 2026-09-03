@@ -9,8 +9,8 @@
   "remoteEnv": {
     "PATH": "/opt/flutter/bin:${containerEnv:PATH}"
   },
-  "onCreateCommand": "bash .devcontainer/setup-flutter.sh",
-  "postCreateCommand": "flutter --version && cd mobile && flutter pub get",
+  "onCreateCommand": "echo 'skip auto flutter install; run bash .devcontainer/setup-flutter.sh manually after boot'",
+  "postCreateCommand": "echo 'codespace ready; run: bash .devcontainer/setup-flutter.sh && cd mobile && flutter pub get'",
   "customizations": {
     "vscode": {
       "extensions": [
