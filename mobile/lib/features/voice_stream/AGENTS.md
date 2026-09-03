@@ -30,6 +30,19 @@
 - 不提交密钥、`.env`、构建产物、日志、录音样本、模型权重等大文件（见根目录 `.gitignore`）。
 - 提交前执行与改动相关的真实验证：`flutter analyze`、`flutter test`；涉及服务端时 `go test ./...`。**只能填写实际跑过的结果，禁止伪造测试或 CI 状态。**
 
+## 验证在哪跑（重要，别再在本机找工具链）
+
+**Windows 本机没有 Flutter，也没有 Go 和 Docker**（`go version` 直接 CommandNotFoundException）。本模块的编译、`flutter analyze`、`flutter test`、`go build`、`go test` 一律在 GitHub Codespace 里跑，不要在本地反复试探，也不要因为本地跑不了就把任务标记成「无法验证」。
+
+- 仓库 `moment-NEW/ai-speak`（本地 remote 名 `fork`），分支 `dev/voice_stream`，工作目录 `/workspaces/ai-speak`。
+- 现有机器 `musical-invention-p49pw6j5g5jcrwvp`（2 核 8G，Flutter 3.47.2 stable / Dart 3.13.2 装在 `/opt/flutter`，Go 1.22 预装）。机器会被重建或改名，**以 `gh codespace list` 的输出为准**。
+- 标准流程：本地提交 → `git push fork dev/voice_stream` → `gh codespace start -c <机器名>` → `gh codespace ssh -c <机器名> -- 'cd /workspaces/ai-speak && git pull --ff-only'` → 在容器内跑验证 → `gh codespace stop -c <机器名>` 省额度。
+- 容器内跑这两组：`cd /workspaces/ai-speak/mobile && flutter pub get && flutter analyze && flutter test`；`cd /workspaces/ai-speak/server && go mod tidy && go build ./... && go test ./...`。
+- **`server/go.sum` 只能在容器内由 `go mod tidy` 生成**，不在本地手工拼接、不在 PR 冲突里手工合并。
+- 环境搭建细节、临时工程法验证完整编译、以及踩坑记录（`gh codespace cp` 在 Windows 上要加 `-- -O`、Flutter 必须打进镜像、自定义镜像要显式加 `sshd` feature）见本模块 `docs/codespaces-flutter-setup.md`。
+
+写验证结论时必须写明在哪个环境跑的（本机 / 哪个 Codespace / 真机）。没有实际跑过的项一律不写「已通过」。
+
 ## 本目录的范围
 
 实时语音链路：麦克风采集 → 分帧/编码 → 上行流 → 服务端识别与评测 → 流式回包 → 端上低延迟播放与字幕/波形显示。
