@@ -160,6 +160,21 @@ class TransportStats extends TransportEvent {
   final int bufferedBytes;
 }
 
+/// @brief 服务端回传的音频帧（回声链路、合成语音等二进制回包）。
+///
+/// @note 与 [TransportMessage] 互补：二进制回包走本事件，JSON 文本结果走
+///       [TransportMessage]；会话层不消费本事件，播放/UI 直接订阅
+///       [AudioTransport.events]。
+class TransportAudioFrame extends TransportEvent {
+  /// @brief 构造回传音频帧事件。
+  ///
+  /// @param frame 服务端回传的音频帧（含帧头解析出的 seq/timestampMs/flags）。
+  const TransportAudioFrame(this.frame);
+
+  /// @brief 服务端回传的音频帧。
+  final AudioFrame frame;
+}
+
 /// @brief 上行传输契约：音频帧外发 + 服务端事件回流。
 ///
 /// 传输栈（WSS / WebRTC）是接口后的可替换件。
@@ -178,4 +193,16 @@ abstract interface class AudioTransport {
   ///
   /// @return 关闭完成时 future 完成。
   Future<void> close();
+}
+
+/// @brief 支持文本控制帧的传输契约（[VoiceSession] 会话层的最小要求）。
+///
+/// 会话层的 begin/finish/cancel 控制需要文本通道；纯音频的
+/// [AudioTransport] 无法承载。R6 的 WSS 回声实现同时满足两个契约；
+/// 接入真实云服务时其协议实现同样需要提供文本通道。
+abstract interface class TextCapableTransport implements AudioTransport {
+  /// @brief 发送一条文本控制/消息帧，非阻塞。
+  ///
+  /// @param payload JSON 文本。
+  void sendText(String payload);
 }
