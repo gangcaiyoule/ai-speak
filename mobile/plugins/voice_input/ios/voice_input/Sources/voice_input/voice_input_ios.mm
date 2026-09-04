@@ -15,6 +15,7 @@
 #include <atomic>
 #include <cstring>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 #include "spsc_ring_buffer.h"
@@ -28,6 +29,7 @@ std::vector<uint8_t> g_render;   ///< 预分配的渲染缓冲（回调内零分
 AudioUnit g_unit = nullptr;      ///< RemoteIO 实例。
 AudioStreamBasicDescription g_asbd = {};  ///< 协商后的输入格式。
 std::atomic<bool> g_running{false};
+std::atomic<int32_t> g_active_callbacks{0}; ///< 正在执行的渲染回调计数（退出同步）。
 std::mutex g_control_mutex;      ///< 保护 start/stop 控制面。
 
 /// @brief 输入渲染回调：AudioUnitRender 取 PCM 后写入环缓。
@@ -37,11 +39,21 @@ OSStatus InputRenderCallback(void * /*inRefCon*/,
                              UInt32 /*inBusNumber*/,
                              UInt32 inNumberFrames,
                              AudioBufferList * /*ioData*/) {
+  if (!g_running.load(std::memory_order_acquire)) {
+    return noErr;
+  }
+  g_active_callbacks.fetch_add(1, std::memory_order_acq_rel);
+
+  const UInt32 needed_bytes = inNumberFrames * 2;
+  if (needed_bytes > g_render.size() || g_unit == nullptr) {
+    g_active_callbacks.fetch_sub(1, std::memory_order_acq_rel);
+    return -1;
+  }
+
   AudioBufferList buffer_list;
   buffer_list.mNumberBuffers = 1;
   buffer_list.mBuffers[0].mNumberChannels = 1;
-  buffer_list.mBuffers[0].mDataByteSize =
-      inNumberFrames * 2;  ///< I16 单声道，字节数。
+  buffer_list.mBuffers[0].mDataByteSize = needed_bytes;  ///< I16 单声道，字节数。
   buffer_list.mBuffers[0].mData = g_render.data();
 
   OSStatus status =
@@ -55,6 +67,7 @@ OSStatus InputRenderCallback(void * /*inRefCon*/,
                    bytes);
     }
   }
+  g_active_callbacks.fetch_sub(1, std::memory_order_acq_rel);
   return status;
 }
 
@@ -158,17 +171,21 @@ OSStatus BuildInputUnit(int32_t requested_rate) {
 
 /// @brief 释放音频单元与环缓存储（持锁调用）。
 void TeardownLocked() {
+  g_running.store(false, std::memory_order_release);
   if (g_unit != nullptr) {
     AudioOutputUnitStop(g_unit);
     AudioUnitUninitialize(g_unit);
     AudioComponentInstanceDispose(g_unit);
     g_unit = nullptr;
   }
+  // 等待可能正在执行的渲染回调彻底退出，避免野指针访问（Use-After-Free）。
+  while (g_active_callbacks.load(std::memory_order_acquire) > 0) {
+    std::this_thread::yield();
+  }
   g_render.clear();
   g_render.shrink_to_fit();
   g_storage.clear();
   g_storage.shrink_to_fit();
-  g_running.store(false, std::memory_order_release);
 }
 
 }  // namespace
@@ -201,13 +218,13 @@ int32_t vi_start(const vi_config_t *cfg) {
     return -2;
   }
 
+  g_running.store(true, std::memory_order_release);
   status = AudioOutputUnitStart(g_unit);
   if (status != noErr) {
     TeardownLocked();
     return -2;
   }
 
-  g_running.store(true, std::memory_order_release);
   return 0;
 }
 
