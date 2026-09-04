@@ -14,6 +14,14 @@ func newToken() (string, error) {
 	}
 	return "sess_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
+
+func newIdentifier() (string, error) {
+	token, err := newToken()
+	if err != nil {
+		return "", err
+	}
+	return token[len("sess_"):], nil
+}
 func tokenDigest(t string) string {
 	s := sha256.Sum256([]byte(t))
 	return base64.RawURLEncoding.EncodeToString(s[:])
