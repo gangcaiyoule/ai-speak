@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/scene"
 )
 
@@ -20,8 +22,11 @@ func TestServiceCreatesAndReadsOwnPlan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreatePlan() error = %v", err)
 	}
-	if created.ActorID != "user-1" || created.Status != PlanStatusActive || created.Objective != "Improve concise answers" {
+	if created.ActorID != "user-1" || created.Status != PlanStatusDraft || created.Objective != "Improve concise answers" {
 		t.Fatalf("unexpected plan = %#v", created)
+	}
+	if _, err := uuid.Parse(created.ID); err != nil {
+		t.Fatalf("created plan ID = %q, want UUID: %v", created.ID, err)
 	}
 	got, err := service.GetPlan(context.Background(), "user-1", created.ID)
 	if err != nil || got.ID != created.ID {
@@ -79,6 +84,20 @@ func TestArchivedPlanCannotStartNewSession(t *testing.T) {
 	}
 	if err = service.EnsureCanCreateSession(context.Background(), "user-1", plan.ID); !errors.Is(err, ErrPlanArchived) {
 		t.Fatalf("EnsureCanCreateSession() error = %v, want ErrPlanArchived", err)
+	}
+	if _, err = service.ArchivePlan(context.Background(), "user-1", plan.ID); !errors.Is(err, ErrPlanArchived) {
+		t.Fatalf("ArchivePlan() twice error = %v, want ErrPlanArchived", err)
+	}
+}
+
+func TestDraftPlanCanProceedToSessionCreation(t *testing.T) {
+	service := NewPlanService(NewMemoryPlanRepository(), scene.NewCatalog())
+	plan, err := service.CreatePlan(context.Background(), "user-1", validPlanInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = service.CanCreateSession(context.Background(), "user-1", plan.ID); err != nil {
+		t.Fatalf("CanCreateSession() for draft = %v, want nil", err)
 	}
 }
 

@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:ai_speak/features/coaching/preparation/preparation.dart';
 import 'package:ai_speak/features/coaching/preparation/preparation_controller.dart';
 import 'package:ai_speak/features/coaching/scene/scene.dart';
 import 'package:ai_speak/features/coaching/scene/scene_client.dart';
@@ -106,7 +108,34 @@ void main() {
 
     expect(plan?.objective, 'Answer with STAR structure');
     expect(plans.lastSelection?.scene.id, 'scene');
-    expect(controller.createdPlan?.status, 'ACTIVE');
+    expect(controller.createdPlan?.status, 'DRAFT');
+  });
+
+  testWidgets('shows plan summary and dispatches start-session callback after creation', (tester) async {
+    final scene = _scene('scene');
+    final controller = PreparationController(
+      client: _FakeClient([scene], details: {'scene': scene}),
+      planClient: _FakePlanClient(),
+    );
+    await controller.loadIfNeeded();
+    await controller.selectScene(scene);
+    controller.selectRole(controller.roles.first);
+    controller.selectOption(controller.availableOptions.first);
+    controller.setObjective('Answer with STAR structure');
+    PracticePlan? started;
+
+    await tester.pumpWidget(MaterialApp(
+      home: PreparationPage(controller: controller, onStartSession: (plan) => started = plan),
+    ));
+    await tester.pump();
+    await tester.tap(find.text('保存并进入准备'));
+    await tester.pump();
+
+    expect(find.text('练习计划已创建'), findsOneWidget);
+    expect(find.text('目标：Answer with STAR structure'), findsOneWidget);
+    expect(find.text('开始会话'), findsOneWidget);
+    await tester.tap(find.text('开始会话'));
+    expect(started?.id, 'plan-1');
   });
 }
 
@@ -137,7 +166,7 @@ final class _FakePlanClient implements PracticePlanClient {
   @override
   Future<PracticePlan> createPlan({required SceneSelectionSnapshot selection, required String objective}) async {
     lastSelection = selection;
-    return PracticePlan(id: 'plan-1', sceneId: selection.scene.id, sceneVersion: selection.scene.version, roleId: selection.selectedRoleIds.single, practiceOptionId: selection.practiceOptionId, objective: objective, status: 'ACTIVE');
+    return PracticePlan(id: 'plan-1', sceneId: selection.scene.id, sceneVersion: selection.scene.version, roleId: selection.selectedRoleIds.single, practiceOptionId: selection.practiceOptionId, objective: objective, status: 'DRAFT');
   }
   @override Future<PracticePlan> archivePlan(String id) => throw UnimplementedError();
   @override Future<PracticePlan> getPlan(String id) => throw UnimplementedError();

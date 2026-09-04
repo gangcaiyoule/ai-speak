@@ -4,11 +4,11 @@ package practice
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/scene"
 )
@@ -20,6 +20,7 @@ var (
 )
 
 const (
+	PlanStatusDraft    = "DRAFT"
 	PlanStatusActive   = "ACTIVE"
 	PlanStatusArchived = "ARCHIVED"
 )
@@ -104,7 +105,7 @@ func (s *planService) CreatePlan(ctx context.Context, actorID string, in CreateP
 		return Plan{}, ErrInvalidPlan
 	}
 	now := s.now().UTC()
-	return s.repo.CreatePlan(ctx, Plan{ID: newPlanID(), ActorID: actorID, SceneID: in.SceneID, SceneVersion: in.SceneVersion, RoleID: in.RoleID, PracticeOptionID: in.PracticeOptionID, Objective: strings.TrimSpace(in.Objective), Status: PlanStatusActive, CreatedAt: now, UpdatedAt: now})
+	return s.repo.CreatePlan(ctx, Plan{ID: newPlanID(), ActorID: actorID, SceneID: in.SceneID, SceneVersion: in.SceneVersion, RoleID: in.RoleID, PracticeOptionID: in.PracticeOptionID, Objective: strings.TrimSpace(in.Objective), Status: PlanStatusDraft, CreatedAt: now, UpdatedAt: now})
 }
 func (s *planService) ListPlans(ctx context.Context, actorID string) ([]Plan, error) {
 	if strings.TrimSpace(actorID) == "" {
@@ -129,7 +130,7 @@ func (s *planService) EnsureCanCreateSession(ctx context.Context, actorID, id st
 	if err != nil {
 		return err
 	}
-	if plan.Status != PlanStatusActive {
+	if plan.Status == PlanStatusArchived {
 		return ErrPlanArchived
 	}
 	return nil
@@ -138,10 +139,8 @@ func (s *planService) CanCreateSession(ctx context.Context, actorID, id string) 
 	return s.EnsureCanCreateSession(ctx, actorID, id)
 }
 
-var planSequence uint64
-
 func newPlanID() string {
-	return fmt.Sprintf("plan-%d-%d", time.Now().UTC().UnixNano(), atomic.AddUint64(&planSequence, 1))
+	return uuid.NewString()
 }
 
 type MemoryPlanRepository struct {
@@ -200,6 +199,9 @@ func (r *MemoryPlanRepository) ArchivePlan(ctx context.Context, actorID, id stri
 	plan, ok := r.plans[id]
 	if !ok || plan.ActorID != actorID {
 		return Plan{}, ErrPlanNotFound
+	}
+	if plan.Status == PlanStatusArchived {
+		return Plan{}, ErrPlanArchived
 	}
 	plan.Status = PlanStatusArchived
 	plan.UpdatedAt = now

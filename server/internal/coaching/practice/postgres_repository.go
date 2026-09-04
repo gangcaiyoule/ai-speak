@@ -36,7 +36,7 @@ func (r *PostgresPlanRepository) ListPlans(ctx context.Context, actorID string) 
 		return nil, fmt.Errorf("list practice plans: %w", err)
 	}
 	defer rows.Close()
-	var plans []Plan
+	plans := make([]Plan, 0)
 	for rows.Next() {
 		var plan Plan
 		if err := rows.Scan(&plan.ID, &plan.ActorID, &plan.SceneID, &plan.SceneVersion, &plan.RoleID, &plan.PracticeOptionID, &plan.Objective, &plan.Status, &plan.CreatedAt, &plan.UpdatedAt); err != nil {
@@ -70,8 +70,18 @@ func (r *PostgresPlanRepository) ArchivePlan(ctx context.Context, actorID, id st
 		return Plan{}, ErrPlanNotFound
 	}
 	var plan Plan
-	err := r.db.QueryRowContext(ctx, `UPDATE practice_plans SET status='ARCHIVED', updated_at=$3 WHERE id=$1 AND actor_id=$2 RETURNING id,actor_id,scene_id,scene_version,role_id,practice_option_id,objective,status,created_at,updated_at`, id, actorID, now).Scan(&plan.ID, &plan.ActorID, &plan.SceneID, &plan.SceneVersion, &plan.RoleID, &plan.PracticeOptionID, &plan.Objective, &plan.Status, &plan.CreatedAt, &plan.UpdatedAt)
+	err := r.db.QueryRowContext(ctx, `UPDATE practice_plans SET status='ARCHIVED', updated_at=$3 WHERE id=$1 AND actor_id=$2 AND status <> 'ARCHIVED' RETURNING id,actor_id,scene_id,scene_version,role_id,practice_option_id,objective,status,created_at,updated_at`, id, actorID, now).Scan(&plan.ID, &plan.ActorID, &plan.SceneID, &plan.SceneVersion, &plan.RoleID, &plan.PracticeOptionID, &plan.Objective, &plan.Status, &plan.CreatedAt, &plan.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
+		current, findErr := r.FindPlan(ctx, actorID, id)
+		if errors.Is(findErr, ErrPlanNotFound) {
+			return Plan{}, ErrPlanNotFound
+		}
+		if findErr != nil {
+			return Plan{}, findErr
+		}
+		if current.Status == PlanStatusArchived {
+			return Plan{}, ErrPlanArchived
+		}
 		return Plan{}, ErrPlanNotFound
 	}
 	if err != nil {

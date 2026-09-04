@@ -66,6 +66,9 @@ func TestPracticePlanHTTPFlowRequiresAuthAndScopesPlansToActor(t *testing.T) {
 	if err := json.NewDecoder(created.Body).Decode(&envelope); err != nil {
 		t.Fatal(err)
 	}
+	if envelope.Plan.Status != practice.PlanStatusDraft {
+		t.Fatalf("created plan status = %q, want %q", envelope.Plan.Status, practice.PlanStatusDraft)
+	}
 	if got := request(http.MethodGet, "/v1/practice-plans/"+envelope.Plan.ID, token2, ""); got.Code != http.StatusNotFound {
 		t.Fatalf("cross-user detail = %d", got.Code)
 	}
@@ -75,6 +78,9 @@ func TestPracticePlanHTTPFlowRequiresAuthAndScopesPlansToActor(t *testing.T) {
 	archived := request(http.MethodPost, "/v1/practice-plans/"+envelope.Plan.ID+"/archive", token1, "")
 	if archived.Code != http.StatusOK || !strings.Contains(archived.Body.String(), `"ARCHIVED"`) {
 		t.Fatalf("archive = %d, %s", archived.Code, archived.Body.String())
+	}
+	if repeated := request(http.MethodPost, "/v1/practice-plans/"+envelope.Plan.ID+"/archive", token1, ""); repeated.Code != http.StatusConflict {
+		t.Fatalf("repeated archive = %d, want %d", repeated.Code, http.StatusConflict)
 	}
 }
 
