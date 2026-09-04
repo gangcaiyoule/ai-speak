@@ -7,23 +7,18 @@ import (
 
 var errNotImplemented = errors.New("identity service is not implemented")
 
-// StubAuthService 是架构阶段使用的身份服务空实现。
 type StubAuthService struct{}
 
-// Register 返回“未实现”占位错误。
-func (StubAuthService) Register(context.Context, RegisterInput) (Session, error) {
-	return Session{}, errNotImplemented
+func (StubAuthService) Register(context.Context, RegisterInput) (User, error) {
+	return User{}, errNotImplemented
 }
-
-// Login 返回“未实现”占位错误。
-func (StubAuthService) Login(context.Context, LoginInput) (Session, error) {
-	return Session{}, errNotImplemented
+func (StubAuthService) Login(context.Context, LoginInput) (LoginResult, error) {
+	return LoginResult{}, errNotImplemented
 }
-
-// Logout 返回“未实现”占位错误。
-func (StubAuthService) Logout(context.Context, string) error { return errNotImplemented }
-
-// CurrentUser 返回“未实现”占位错误。
+func (StubAuthService) Authenticate(context.Context, string) (Actor, error) {
+	return Actor{}, errNotImplemented
+}
 func (StubAuthService) CurrentUser(context.Context, string) (User, error) {
 	return User{}, errNotImplemented
 }
+func (StubAuthService) Logout(context.Context, string) error { return errNotImplemented }
