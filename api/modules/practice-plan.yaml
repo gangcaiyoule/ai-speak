@@ -1,0 +1,113 @@
+openapi: 3.0.3
+info:
+  title: Practice Plan API
+  version: 1.0.0
+paths:
+  /v1/practice-plans:
+    post:
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreatePracticePlan'}
+      responses:
+        '201':
+          description: Created
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlanResponse'}}}
+        '400':
+          description: Invalid request
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '401':
+          description: Authentication required
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    get:
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Plans owned by the authenticated user
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlansResponse'}}}
+        '401':
+          description: Authentication required
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+  /v1/practice-plans/{plan_id}:
+    get:
+      security: [{bearerAuth: []}]
+      parameters: [{name: plan_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200':
+          description: Plan detail
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlanResponse'}}}
+        '401':
+          description: Authentication required
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '404':
+          description: Plan not found or not owned by the authenticated user
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+  /v1/practice-plans/{plan_id}/archive:
+    post:
+      security: [{bearerAuth: []}]
+      parameters: [{name: plan_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200':
+          description: Archived plan
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlanResponse'}}}
+        '401':
+          description: Authentication required
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '404':
+          description: Plan not found or not owned by the authenticated user
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '409':
+          description: Invalid plan state transition
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  schemas:
+    CreatePracticePlan:
+      type: object
+      required: [scene_id, scene_version, role_id, practice_option_id, objective]
+      additionalProperties: false
+      properties:
+        scene_id: {type: string}
+        scene_version: {type: integer, minimum: 1}
+        role_id: {type: string}
+        practice_option_id: {type: string}
+        objective: {type: string}
+    PracticePlan:
+      type: object
+      required: [id, actor_id, scene_id, scene_version, role_id, practice_option_id, objective, status, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        actor_id: {type: string}
+        scene_id: {type: string}
+        scene_version: {type: integer}
+        role_id: {type: string}
+        practice_option_id: {type: string}
+        objective: {type: string}
+        status: {type: string, enum: [DRAFT, ACTIVE, ARCHIVED]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    PlanResponse:
+      type: object
+      required: [plan]
+      properties:
+        plan: {$ref: '#/components/schemas/PracticePlan'}
+    PlansResponse:
+      type: object
+      required: [plans]
+      properties:
+        plans:
+          type: array
+          items: {$ref: '#/components/schemas/PracticePlan'}
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}

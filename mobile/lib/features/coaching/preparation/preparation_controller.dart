@@ -2,13 +2,16 @@ import 'package:flutter/foundation.dart';
 
 import '../scene/scene.dart';
 import '../scene/scene_client.dart';
+import '../practice_plan/practice_plan.dart';
+import '../practice_plan/practice_plan_client.dart';
 
 enum PreparationViewState { initial, loading, loaded, empty, failed }
 
 final class PreparationController extends ChangeNotifier {
-  PreparationController({required this.client});
+  PreparationController({required this.client, this.planClient});
 
   final SceneClient client;
+  final PracticePlanClient? planClient;
   List<SceneDefinition> _scenes = const [];
   SceneDefinition? _selectedScene;
   SceneDefinition? _detail;
@@ -19,6 +22,10 @@ final class PreparationController extends ChangeNotifier {
   bool _loadingDetail = false;
   Future<void>? _sceneRequest;
   String? _failedSceneId;
+  String _objective = '';
+  bool _creatingPlan = false;
+  PracticePlan? _createdPlan;
+  String? _planErrorMessage;
 
   List<SceneDefinition> get scenes => List.unmodifiable(_scenes);
   SceneDefinition? get selectedScene => _selectedScene;
@@ -30,6 +37,10 @@ final class PreparationController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isLoadingScenes => _state == PreparationViewState.loading;
   bool get isLoadingDetail => _loadingDetail;
+  String get objective => _objective;
+  bool get isCreatingPlan => _creatingPlan;
+  PracticePlan? get createdPlan => _createdPlan;
+  String? get planErrorMessage => _planErrorMessage;
 
   List<PracticeOption> get availableOptions {
     final role = _selectedRole;
@@ -126,11 +137,26 @@ final class PreparationController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setObjective(String value) { _objective = value; if (_planErrorMessage != null) { _planErrorMessage = null; notifyListeners(); } }
+
+  Future<PracticePlan?> createPlan() async {
+    final selection = selectionResult;
+    final client = planClient;
+    if (selection == null || client == null || _objective.trim().isEmpty || _creatingPlan) return null;
+    _creatingPlan = true; _planErrorMessage = null; notifyListeners();
+    try { _createdPlan = await client.createPlan(selection: selection, objective: _objective.trim()); return _createdPlan; }
+    on PracticePlanClientException catch (error) { _planErrorMessage = error.message; return null; }
+    finally { _creatingPlan = false; notifyListeners(); }
+  }
+
   void clearSelection() {
     _selectedScene = null;
     _detail = null;
     _selectedRole = null;
     _selectedOption = null;
+    _objective = '';
+    _createdPlan = null;
+    _planErrorMessage = null;
     _errorMessage = null;
     _failedSceneId = null;
     notifyListeners();
