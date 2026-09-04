@@ -3,7 +3,7 @@
 - 模块路径：`mobile/lib/features/voice_stream/`
 - 文档位置：`mobile/lib/features/voice_stream/docs/interfaces.md`（2026-09-03 由
   `docs/24320106/voice-stream-interfaces.md` 迁入，接口规格随模块一起维护）
-- 状态：v0.3（R3：切帧器与帧头编解码；平台实现未接入）
+- 状态：v0.4（R7：AudioSink 播放路径、欠载状态机与丢帧统计已落地）
 - 范围：读（采集）、传（上行/回包）、放（播放）三条数据通路的抽象；
   UI（字幕/波形）不在本文档范围内，只通过事件流消费数据。
 
@@ -27,6 +27,8 @@ AudioSink ←── AudioFrame                    （播放）
 | 共享环形缓冲 | `src/ring_buffer.dart` |
 | 切帧器与帧头编解码 | `src/frame_slicer.dart` |
 | 会话层契约与生命周期状态机 | `src/session.dart` |
+| 采集端平台实现 | `src/native_mic_source.dart` |
+| 播放端平台实现与欠载状态机 | `src/native_audio_sink.dart` / `native/playback_queue.h` |
 
 ## 2. 值对象
 
@@ -93,6 +95,20 @@ AudioSink ←── AudioFrame                    （播放）
 | `write` | `bool write(AudioFrame frame)` | 写入待播帧；缓冲满则拒绝并返回 `false`，**永不阻塞** |
 | `underrunBytes` | `int`（getter） | 播放缓冲欠载字节数，供欠载策略调参 |
 | `stop` | `Future<void> stop()` | 关闭播放并释放设备；幂等 |
+
+### 4.1 NativeAudioSink 与 playback_queue 状态机（v0.4 新增，R7）
+
+`src/native_audio_sink.dart` 实现了 `AudioSink` 契约，经 `package:voice_input` 播放绑定（C ABI `vo_*` 一族，`native/voice_output.h`）操作原生播放队列：
+
+- **生产者（Dart 线程）**：通过 `write(frame)` 全有或全无写入原生队列；缓冲满时整块拒绝返回 `false`，永不阻塞；拒绝量累计至 `droppedBytes`。
+- **消费者（音频回调线程）**：Oboe（Android）或 RemoteIO（iOS）渲染回调经 `vsc_pbq_acquire` 零拷贝取数填入音频缓冲，取数后 `vsc_pbq_commit` 推进读指针；缺口部分补零静音。
+- **预缓冲（priming）与迟滞（hysteresis）**：启动后攒够 `primingMs`（默认 40ms）才开始出数；取空后回退到预缓冲状态，避免边读边写反复欠载。
+- **欠载统计**：首次完成预缓冲后，回调每次输出静音的字节数累计到 `underrunBytes`（启动预缓冲期的初始静音不计入）。
+- **惰性启动与重连**：首次 `write` 时惰性调用 `start`；`stop()` 释放后再次 `write` 会重新打开设备。
+
+单测基线：
+- C 原生状态机：`mobile/lib/features/voice_stream/native/test_playback_queue.c`（7 个用例：参数校验、全有或全无、预缓冲阈值、欠载迟滞、部分取数缺口、跨回绕双视图、零阈值直通）。
+- Dart 实现：`mobile/test/voice_stream/native_audio_sink_test.dart`（6 个用例：惰性启动与写入、空帧直通、满载拒绝、统计量透传、stop 幂等与重连、启动异常回滚）。
 
 ## 5. AudioTransport（上行传输契约）
 

@@ -5,10 +5,11 @@
 Pod::Spec.new do |s|
   s.name             = 'voice_input'
   s.version          = '0.1.0'
-  s.summary          = 'voice_stream 采集端平台实现（RemoteIO）。'
+  s.summary          = 'voice_stream 采集/播放端平台实现（RemoteIO）。'
   s.description      = <<-DESC
-RemoteIO 输入流 + AVAudioSession 激活壳，回调写入共享 SPSC 环缓，
-经 dart:ffi 暴露 vi_* C ABI。
+RemoteIO 输入流 + AVAudioSession 激活壳（采集），RemoteIO 输出侧渲染回调
+（播放），共用 SPSC 环缓与 playback_queue 欠载状态机，经 dart:ffi 暴露
+vi_* / vo_* C ABI。
                        DESC
   s.homepage         = 'http://example.com'
   s.license          = { :file => '../LICENSE' }

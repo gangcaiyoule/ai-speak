@@ -59,6 +59,15 @@ class VoiceInputException implements Exception {
   String toString() => 'VoiceInputException($code): $message';
 }
 
+/// @brief 按平台选择默认动态库句柄：Android 动态打开 libvoice_input.so；
+/// iOS 原生库静态链入主二进制，用 DynamicLibrary.process()。
+DynamicLibrary _defaultLibrary() {
+  if (Platform.isAndroid) {
+    return DynamicLibrary.open('libvoice_input.so');
+  }
+  return DynamicLibrary.process(); // iOS：静态链入主二进制。
+}
+
 /// @brief dart:ffi 真实绑定。
 final class FfiVoiceInputBindings implements VoiceInputBindings {
   /// @brief 构造绑定；缺省按平台自动选择库句柄。
@@ -74,13 +83,6 @@ final class FfiVoiceInputBindings implements VoiceInputBindings {
         _lib.lookupFunction<ViDroppedNative, ViDroppedDart>('vi_dropped');
     _viFormat =
         _lib.lookupFunction<ViFormatNative, ViFormatDart>('vi_format');
-  }
-
-  static DynamicLibrary _defaultLibrary() {
-    if (Platform.isAndroid) {
-      return DynamicLibrary.open('libvoice_input.so');
-    }
-    return DynamicLibrary.process(); // iOS：静态链入主二进制。
   }
 
   final DynamicLibrary _lib;
@@ -181,4 +183,199 @@ typedef ViDroppedDart = int Function();
 typedef ViFormatNative = Int32 Function(
     Pointer<Int32>, Pointer<Int32>, Pointer<Int32>);
 typedef ViFormatDart = int Function(
+    Pointer<Int32>, Pointer<Int32>, Pointer<Int32>);
+
+/// @brief 播放端原生绑定接口（与 voice_output.h C ABI 一一对应）。
+///
+/// 抛错语义：start 失败抛 [VoiceOutputException]；其余方法不抛（write
+/// 返回实际接受字节数，幂等 stop 返回即完成）。
+abstract interface class VoiceOutputBindings {
+  /// @brief 打开输出流并启动回调消费播放队列（对应 vo_start）。
+  ///
+  /// @param sampleRateHz 请求采样率。
+  /// @param capacityMs 播放缓冲容量按毫秒预算。
+  /// @param primingMs 预缓冲阈值；负值取原生默认。
+  void start({
+    required int sampleRateHz,
+    required int capacityMs,
+    required int primingMs,
+  });
+
+  /// @brief 停止并释放流（对应 vo_stop，幂等）。
+  void stop();
+
+  /// @brief 拷贝写入待播放 PCM（对应 vo_write，全有或全无）。
+  ///
+  /// @param source 待写入 PCM 字节。
+  /// @return 实际接受的字节数：全量或 0（缓冲满整块拒绝）。
+  int write(Uint8List source);
+
+  /// @brief 当前缓冲中的可播放字节数（对应 vo_buffered）。
+  int bufferedBytes();
+
+  /// @brief 欠载静音累计字节数（对应 vo_underrun）。
+  int underrunBytes();
+
+  /// @brief 空间不足被整块拒绝的累计字节数（对应 vo_dropped）。
+  int droppedBytes();
+
+  /// @brief 协商后的实际格式（对应 vo_format）；未启动时为 null。
+  ({int sampleRateHz, int channelCount, int bitsPerSample})?
+      negotiatedFormat();
+}
+
+/// @brief 原生播放层返回的错误。
+class VoiceOutputException implements Exception {
+  /// @brief 构造异常。
+  ///
+  /// @param code vo_start 返回的错误码。
+  /// @param message 人类可读描述。
+  const VoiceOutputException(this.code, this.message);
+
+  /// @brief 错误码（voice_output.h 注释）。
+  final int code;
+
+  /// @brief 人类可读描述。
+  final String message;
+
+  @override
+  String toString() => 'VoiceOutputException($code): $message';
+}
+
+/// @brief dart:ffi 真实播放绑定（与采集共用 libvoice_input.so）。
+final class FfiVoiceOutputBindings implements VoiceOutputBindings {
+  /// @brief 构造绑定；缺省按平台自动选择库句柄。
+  ///
+  /// @param library 已打开的动态库；测试可注入。
+  FfiVoiceOutputBindings({DynamicLibrary? library})
+      : _lib = library ?? _defaultLibrary() {
+    _voStart =
+        _lib.lookupFunction<VoStartNative, VoStartDart>('vo_start');
+    _voStop = _lib.lookupFunction<VoStopNative, VoStopDart>('vo_stop');
+    _voWrite = _lib.lookupFunction<VoWriteNative, VoWriteDart>('vo_write');
+    _voBuffered =
+        _lib.lookupFunction<VoBufferedNative, VoBufferedDart>('vo_buffered');
+    _voUnderrun =
+        _lib.lookupFunction<VoUnderrunNative, VoUnderrunDart>('vo_underrun');
+    _voDropped =
+        _lib.lookupFunction<VoDroppedNative, VoDroppedDart>('vo_dropped');
+    _voFormat =
+        _lib.lookupFunction<VoFormatNative, VoFormatDart>('vo_format');
+  }
+
+  final DynamicLibrary _lib;
+
+  late final VoStartDart _voStart;
+  late final VoStopDart _voStop;
+  late final VoWriteDart _voWrite;
+  late final VoBufferedDart _voBuffered;
+  late final VoUnderrunDart _voUnderrun;
+  late final VoDroppedDart _voDropped;
+  late final VoFormatDart _voFormat;
+
+  Pointer<VoConfig>? _config;
+  Pointer<Uint8>? _writeBuffer;
+  int _writeBufferBytes = 0;
+  Pointer<Int32>? _formatOut;
+
+  @override
+  void start({
+    required int sampleRateHz,
+    required int capacityMs,
+    required int primingMs,
+  }) {
+    final config = _config ??= malloc<VoConfig>();
+    config.ref.sampleRate = sampleRateHz;
+    config.ref.capacityMs = capacityMs;
+    config.ref.primingMs = primingMs;
+    final code = _voStart(config);
+    if (code != 0) {
+      throw VoiceOutputException(code, switch (code) {
+        -1 => '播放已在运行',
+        -2 => '输出流打开失败',
+        -3 => '启动参数非法',
+        _ => 'vo_start 未知错误码',
+      });
+    }
+  }
+
+  @override
+  void stop() {
+    if (_config != null) {
+      _voStop();
+    }
+  }
+
+  @override
+  int write(Uint8List source) {
+    if (source.isEmpty) {
+      return 0;
+    }
+    if (_writeBuffer == null || _writeBufferBytes < source.length) {
+      if (_writeBuffer != null) {
+        malloc.free(_writeBuffer!);
+      }
+      _writeBuffer = malloc<Uint8>(source.length);
+      _writeBufferBytes = source.length;
+    }
+    _writeBuffer!.asTypedList(source.length).setAll(0, source);
+    return _voWrite(_writeBuffer!, source.length);
+  }
+
+  @override
+  int bufferedBytes() => _voBuffered();
+
+  @override
+  int underrunBytes() => _voUnderrun();
+
+  @override
+  int droppedBytes() => _voDropped();
+
+  @override
+  ({int sampleRateHz, int channelCount, int bitsPerSample})?
+      negotiatedFormat() {
+    final out = _formatOut ??= malloc<Int32>(3);
+    final code = _voFormat(out, out + 1, out + 2);
+    if (code != 0 || out[0] == 0) {
+      return null;
+    }
+    return (
+      sampleRateHz: out[0],
+      channelCount: out[1],
+      bitsPerSample: out[2],
+    );
+  }
+}
+
+/// @brief vo_config_t 的 FFI 视图（与 voice_output.h 布局一致）。
+final class VoConfig extends Struct {
+  /// @brief 请求采样率，单位 Hz。
+  @Int32()
+  external int sampleRate;
+
+  /// @brief 播放缓冲容量按毫秒预算。
+  @Int32()
+  external int capacityMs;
+
+  /// @brief 预缓冲阈值，单位毫秒。
+  @Int32()
+  external int primingMs;
+}
+
+// vo_* C ABI 的原生/Dart 签名对。
+typedef VoStartNative = Int32 Function(Pointer<VoConfig>);
+typedef VoStartDart = int Function(Pointer<VoConfig>);
+typedef VoStopNative = Int32 Function();
+typedef VoStopDart = int Function();
+typedef VoWriteNative = Int32 Function(Pointer<Uint8>, Int32);
+typedef VoWriteDart = int Function(Pointer<Uint8>, int);
+typedef VoBufferedNative = Int32 Function();
+typedef VoBufferedDart = int Function();
+typedef VoUnderrunNative = Uint64 Function();
+typedef VoUnderrunDart = int Function();
+typedef VoDroppedNative = Uint64 Function();
+typedef VoDroppedDart = int Function();
+typedef VoFormatNative = Int32 Function(
+    Pointer<Int32>, Pointer<Int32>, Pointer<Int32>);
+typedef VoFormatDart = int Function(
     Pointer<Int32>, Pointer<Int32>, Pointer<Int32>);
