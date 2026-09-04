@@ -38,13 +38,19 @@ func buildRouterWithRepository(repository identity.Repository) http.Handler {
 }
 
 func buildRouterWithRepositories(repository identity.Repository, planRepository practice.PlanRepository) http.Handler {
+	return buildRouterWithAllRepositories(repository, planRepository, practice.NewMemorySessionRepository())
+}
+
+func buildRouterWithAllRepositories(repository identity.Repository, planRepository practice.PlanRepository, sessionRepository practice.SessionRepository) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	auth := identity.NewService(repository)
 	identity.NewHTTPHandler(auth).RegisterRoutes(mux)
 	agent.NewHTTPHandler(agent.StubService{}).RegisterRoutes(mux)
 	catalog := scene.NewCatalog()
-	coaching.NewHTTPHandlerWithDependencies(auth, practice.NewPlanService(planRepository, catalog), catalog).RegisterRoutes(mux)
+	plans := practice.NewPlanService(planRepository, catalog)
+	sessions := practice.NewSessionService(sessionRepository, plans, catalog)
+	coaching.NewHTTPHandlerWithAllDependencies(auth, plans, sessions, catalog).RegisterRoutes(mux)
 	mux.Handle("GET /ws/voice/echo", voiceecho.NewWSSHandler())
 	return mux
 }
@@ -61,6 +67,7 @@ func main() {
 	}
 	var repository identity.Repository = identity.NewMemoryRepository()
 	var planRepository practice.PlanRepository = practice.NewMemoryPlanRepository()
+	var sessionRepository practice.SessionRepository = practice.NewMemorySessionRepository()
 	var db *sql.DB
 	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
 		var err error
@@ -74,10 +81,11 @@ func main() {
 		defer db.Close()
 		repository = identity.NewPostgresRepository(db)
 		planRepository = practice.NewPostgresPlanRepository(db)
+		sessionRepository = practice.NewPostgresSessionRepository(db)
 	}
 	address := host + ":" + port
 	log.Printf("ai-speak server listening on %s", address)
-	if err := http.ListenAndServe(address, buildRouterWithRepositories(repository, planRepository)); err != nil {
+	if err := http.ListenAndServe(address, buildRouterWithAllRepositories(repository, planRepository, sessionRepository)); err != nil {
 		log.Fatal(err)
 	}
 }

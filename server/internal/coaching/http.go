@@ -14,18 +14,31 @@ import (
 
 // HTTPHandler 通过 REST 传输层暴露场景、练习和评测接口。
 type HTTPHandler struct {
-	catalog scene.CatalogReader
-	auth    identity.AuthService
-	plans   practice.PlanService
+	catalog  scene.CatalogReader
+	auth     identity.AuthService
+	plans    practice.PlanService
+	sessions practice.SessionService
 }
 
-// NewHTTPHandler 创建口语训练模块的空 HTTP 处理器。
-func NewHTTPHandler() *HTTPHandler { return &HTTPHandler{catalog: scene.NewCatalog()} }
+// NewHTTPHandler 创建使用内存 Repository 的本地 HTTP 处理器。
+func NewHTTPHandler() *HTTPHandler {
+	catalog := scene.NewCatalog()
+	plans := practice.NewPlanService(practice.NewMemoryPlanRepository(), catalog)
+	sessions := practice.NewSessionService(practice.NewMemorySessionRepository(), plans, catalog)
+	return &HTTPHandler{catalog: catalog, plans: plans, sessions: sessions}
+}
 func NewHTTPHandlerWithDependencies(auth identity.AuthService, plans practice.PlanService, catalog scene.CatalogReader) *HTTPHandler {
 	if plans == nil || catalog == nil {
 		panic("coaching plan dependencies are required")
 	}
-	return &HTTPHandler{catalog: catalog, auth: auth, plans: plans}
+	return NewHTTPHandlerWithAllDependencies(auth, plans, practice.NewSessionService(practice.NewMemorySessionRepository(), plans, catalog), catalog)
+}
+
+func NewHTTPHandlerWithAllDependencies(auth identity.AuthService, plans practice.PlanService, sessions practice.SessionService, catalog scene.CatalogReader) *HTTPHandler {
+	if plans == nil || sessions == nil || catalog == nil {
+		panic("coaching dependencies are required")
+	}
+	return &HTTPHandler{catalog: catalog, auth: auth, plans: plans, sessions: sessions}
 }
 
 // RegisterRoutes 在指定路由器上注册口语训练接口。
@@ -37,11 +50,13 @@ func (h *HTTPHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/practice-plans", h.listPlans)
 	mux.HandleFunc("GET /v1/practice-plans/{plan_id}", h.getPlan)
 	mux.HandleFunc("POST /v1/practice-plans/{plan_id}/archive", h.archivePlan)
-	mux.HandleFunc("POST /v1/practice-sessions", h.notImplemented)
-	mux.HandleFunc("GET /v1/practice-sessions/{session_id}", h.notImplemented)
-	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/activation", h.notImplemented)
+	mux.HandleFunc("POST /v1/practice-sessions", h.createSession)
+	mux.HandleFunc("GET /v1/practice-sessions/{session_id}", h.getSession)
+	mux.HandleFunc("GET /v1/practice-sessions/{session_id}/current-question", h.getCurrentQuestion)
+	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/activation", h.activateSession)
+	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/activate", h.activateSession)
 	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/text-answers", h.notImplemented)
-	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/complete", h.notImplemented)
+	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/complete", h.completeSession)
 	mux.HandleFunc("GET /v1/practice-sessions/{session_id}/evaluation", h.notImplemented)
 	mux.HandleFunc("GET /v1/evaluation-reports/{report_id}", h.notImplemented)
 }
@@ -98,6 +113,75 @@ func (h *HTTPHandler) archivePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"plan": plan})
 }
+
+func (h *HTTPHandler) createSession(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	var in practice.CreateSessionInput
+	if !decodeCoachingJSON(w, r, &in) {
+		return
+	}
+	session, err := h.sessions.CreateSession(r.Context(), actorID, in)
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"session": session})
+}
+
+func (h *HTTPHandler) getSession(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	session, err := h.sessions.GetSession(r.Context(), actorID, r.PathValue("session_id"))
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"session": session})
+}
+
+func (h *HTTPHandler) getCurrentQuestion(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	question, err := h.sessions.GetCurrentQuestion(r.Context(), actorID, r.PathValue("session_id"))
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"question": question})
+}
+
+func (h *HTTPHandler) activateSession(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	session, err := h.sessions.ActivateSession(r.Context(), actorID, r.PathValue("session_id"))
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"session": session})
+}
+
+func (h *HTTPHandler) completeSession(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	session, err := h.sessions.CompleteSession(r.Context(), actorID, r.PathValue("session_id"))
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"session": session})
+}
 func (h *HTTPHandler) actorID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	if h.auth == nil {
 		h.writePlanError(w, identity.ErrUnauthorized)
@@ -117,6 +201,14 @@ func (h *HTTPHandler) actorID(w http.ResponseWriter, r *http.Request) (string, b
 }
 
 func (h *HTTPHandler) writePlanError(w http.ResponseWriter, err error) {
+	h.writeCoachingError(w, err)
+}
+
+func (h *HTTPHandler) writePracticeError(w http.ResponseWriter, err error) {
+	h.writeCoachingError(w, err)
+}
+
+func (h *HTTPHandler) writeCoachingError(w http.ResponseWriter, err error) {
 	status, code := http.StatusInternalServerError, "internal_error"
 	switch {
 	case errors.Is(err, identity.ErrUnauthorized):
@@ -127,6 +219,16 @@ func (h *HTTPHandler) writePlanError(w http.ResponseWriter, err error) {
 		status, code = http.StatusNotFound, "practice_plan_not_found"
 	case errors.Is(err, practice.ErrPlanArchived):
 		status, code = http.StatusConflict, "practice_plan_archived"
+	case errors.Is(err, practice.ErrInvalidSession):
+		status, code = http.StatusBadRequest, "invalid_request"
+	case errors.Is(err, practice.ErrSessionNotFound):
+		status, code = http.StatusNotFound, "practice_session_not_found"
+	case errors.Is(err, practice.ErrSessionNotActive):
+		status, code = http.StatusConflict, "practice_session_not_active"
+	case errors.Is(err, practice.ErrInvalidSessionTransition):
+		status, code = http.StatusConflict, "invalid_state_transition"
+	case errors.Is(err, practice.ErrNoCurrentQuestion):
+		status, code = http.StatusConflict, "practice_question_not_available"
 	}
 	if status == http.StatusUnauthorized {
 		w.Header().Set("WWW-Authenticate", "Bearer")
