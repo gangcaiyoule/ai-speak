@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ai_speak/features/coaching/preparation/preparation_controller.dart';
 import 'package:ai_speak/features/coaching/scene/scene.dart';
 import 'package:ai_speak/features/coaching/scene/scene_client.dart';
+import 'package:ai_speak/features/coaching/practice_plan/practice_plan.dart';
+import 'package:ai_speak/features/coaching/practice_plan/practice_plan_client.dart';
 
 void main() {
   test('loads scenes in the client-provided order', () async {
@@ -89,6 +91,23 @@ void main() {
     expect(result.selectedRoleIds, ['role-1']);
     expect(result.practiceOptionId, 'full');
   });
+
+  test('creates a plan from the completed scene selection and objective', () async {
+    final scene = _scene('scene');
+    final plans = _FakePlanClient();
+    final controller = PreparationController(client: _FakeClient([scene], details: {'scene': scene}), planClient: plans);
+    await controller.loadIfNeeded();
+    await controller.selectScene(scene);
+    controller.selectRole(controller.roles.first);
+    controller.selectOption(controller.availableOptions.first);
+    controller.setObjective('Answer with STAR structure');
+
+    final plan = await controller.createPlan();
+
+    expect(plan?.objective, 'Answer with STAR structure');
+    expect(plans.lastSelection?.scene.id, 'scene');
+    expect(controller.createdPlan?.status, 'ACTIVE');
+  });
 }
 
 final class _FakeClient implements SceneClient {
@@ -111,6 +130,18 @@ final class _FakeClient implements SceneClient {
 
   @override
   Future<SceneDefinition> getScene(String sceneId) async => details[sceneId] ?? scenes.firstWhere((scene) => scene.id == sceneId);
+}
+
+final class _FakePlanClient implements PracticePlanClient {
+  SceneSelectionSnapshot? lastSelection;
+  @override
+  Future<PracticePlan> createPlan({required SceneSelectionSnapshot selection, required String objective}) async {
+    lastSelection = selection;
+    return PracticePlan(id: 'plan-1', sceneId: selection.scene.id, sceneVersion: selection.scene.version, roleId: selection.selectedRoleIds.single, practiceOptionId: selection.practiceOptionId, objective: objective, status: 'ACTIVE');
+  }
+  @override Future<PracticePlan> archivePlan(String id) => throw UnimplementedError();
+  @override Future<PracticePlan> getPlan(String id) => throw UnimplementedError();
+  @override Future<List<PracticePlan>> listPlans() => throw UnimplementedError();
 }
 
 SceneDefinition _scene(String id, {int version = 1, int roles = 1}) {

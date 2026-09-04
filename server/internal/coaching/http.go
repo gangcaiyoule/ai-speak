@@ -3,22 +3,40 @@ package coaching
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 
+	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/practice"
 	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/scene"
+	"github.com/gangcaiyoule/ai-speak/server/internal/identity"
 )
 
 // HTTPHandler 通过 REST 传输层暴露场景、练习和评测接口。
-type HTTPHandler struct{ catalog scene.CatalogReader }
+type HTTPHandler struct {
+	catalog scene.CatalogReader
+	auth    identity.AuthService
+	plans   practice.PlanService
+}
 
 // NewHTTPHandler 创建口语训练模块的空 HTTP 处理器。
 func NewHTTPHandler() *HTTPHandler { return &HTTPHandler{catalog: scene.NewCatalog()} }
+func NewHTTPHandlerWithDependencies(auth identity.AuthService, plans practice.PlanService, catalog scene.CatalogReader) *HTTPHandler {
+	if plans == nil || catalog == nil {
+		panic("coaching plan dependencies are required")
+	}
+	return &HTTPHandler{catalog: catalog, auth: auth, plans: plans}
+}
 
 // RegisterRoutes 在指定路由器上注册口语训练接口。
 func (h *HTTPHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/scenes", h.listScenes)
 	mux.HandleFunc("GET /v1/scenes/{scene_id}", h.getScene)
 	mux.HandleFunc("GET /v1/scenes/{scene_id}/roles", h.listRoles)
+	mux.HandleFunc("POST /v1/practice-plans", h.createPlan)
+	mux.HandleFunc("GET /v1/practice-plans", h.listPlans)
+	mux.HandleFunc("GET /v1/practice-plans/{plan_id}", h.getPlan)
+	mux.HandleFunc("POST /v1/practice-plans/{plan_id}/archive", h.archivePlan)
 	mux.HandleFunc("POST /v1/practice-sessions", h.notImplemented)
 	mux.HandleFunc("GET /v1/practice-sessions/{session_id}", h.notImplemented)
 	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/activation", h.notImplemented)
@@ -26,6 +44,109 @@ func (h *HTTPHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/complete", h.notImplemented)
 	mux.HandleFunc("GET /v1/practice-sessions/{session_id}/evaluation", h.notImplemented)
 	mux.HandleFunc("GET /v1/evaluation-reports/{report_id}", h.notImplemented)
+}
+
+func (h *HTTPHandler) createPlan(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	var in practice.CreatePlanInput
+	if !decodeCoachingJSON(w, r, &in) {
+		return
+	}
+	plan, err := h.plans.CreatePlan(r.Context(), actorID, in)
+	if err != nil {
+		h.writePlanError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"plan": plan})
+}
+func (h *HTTPHandler) listPlans(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	plans, err := h.plans.ListPlans(r.Context(), actorID)
+	if err != nil {
+		h.writePlanError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"plans": plans})
+}
+func (h *HTTPHandler) getPlan(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	plan, err := h.plans.GetPlan(r.Context(), actorID, r.PathValue("plan_id"))
+	if err != nil {
+		h.writePlanError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"plan": plan})
+}
+func (h *HTTPHandler) archivePlan(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	plan, err := h.plans.ArchivePlan(r.Context(), actorID, r.PathValue("plan_id"))
+	if err != nil {
+		h.writePlanError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"plan": plan})
+}
+func (h *HTTPHandler) actorID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if h.auth == nil {
+		h.writePlanError(w, identity.ErrUnauthorized)
+		return "", false
+	}
+	parts := strings.Fields(r.Header.Get("Authorization"))
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		h.writePlanError(w, identity.ErrUnauthorized)
+		return "", false
+	}
+	actor, err := h.auth.Authenticate(r.Context(), parts[1])
+	if err != nil {
+		h.writePlanError(w, identity.ErrUnauthorized)
+		return "", false
+	}
+	return actor.UserID, true
+}
+
+func (h *HTTPHandler) writePlanError(w http.ResponseWriter, err error) {
+	status, code := http.StatusInternalServerError, "internal_error"
+	switch {
+	case errors.Is(err, identity.ErrUnauthorized):
+		status, code = http.StatusUnauthorized, "authentication_required"
+	case errors.Is(err, practice.ErrInvalidPlan):
+		status, code = http.StatusBadRequest, "invalid_request"
+	case errors.Is(err, practice.ErrPlanNotFound):
+		status, code = http.StatusNotFound, "practice_plan_not_found"
+	case errors.Is(err, practice.ErrPlanArchived):
+		status, code = http.StatusConflict, "practice_plan_archived"
+	}
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+	}
+	writeJSON(w, status, map[string]any{"error": map[string]any{"code": code, "message": code}})
+}
+
+func decodeCoachingJSON(w http.ResponseWriter, r *http.Request, target any) bool {
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		h := map[string]string{"code": "invalid_request", "message": "invalid_request"}
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": h})
+		return false
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(target) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"code": "invalid_request", "message": "invalid_request"}})
+		return false
+	}
+	return true
 }
 
 func (h *HTTPHandler) listScenes(w http.ResponseWriter, r *http.Request) {

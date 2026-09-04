@@ -1,0 +1,52 @@
+openapi: 3.0.3
+info:
+  title: Practice Plan API
+  version: 1.0.0
+paths:
+  /v1/practice-plans:
+    post:
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreatePracticePlan'}
+      responses:
+        '201': {description: Created}
+        '400': {description: Invalid request}
+        '401': {description: Authentication required}
+    get:
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Own plans}
+        '401': {description: Authentication required}
+  /v1/practice-plans/{plan_id}:
+    get:
+      security: [{bearerAuth: []}]
+      parameters: [{name: plan_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Plan detail}
+        '401': {description: Authentication required}
+        '404': {description: Plan not found}
+  /v1/practice-plans/{plan_id}/archive:
+    post:
+      security: [{bearerAuth: []}]
+      parameters: [{name: plan_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Archived plan}
+        '401': {description: Authentication required}
+        '404': {description: Plan not found}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  schemas:
+    CreatePracticePlan:
+      type: object
+      required: [scene_id, scene_version, role_id, practice_option_id, objective]
+      additionalProperties: false
+      properties:
+        scene_id: {type: string}
+        scene_version: {type: integer, minimum: 1}
+        role_id: {type: string}
+        practice_option_id: {type: string}
+        objective: {type: string}
