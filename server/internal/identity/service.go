@@ -26,7 +26,11 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (User, error) 
 	if err != nil {
 		return User{}, err
 	}
-	return s.repo.CreateWithPasswordHash(ctx, StoredUser{User: User{Email: e}, PasswordHash: h})
+	id, err := newIdentifier()
+	if err != nil {
+		return User{}, err
+	}
+	return s.repo.CreateWithPasswordHash(ctx, StoredUser{User: User{ID: id, Email: e}, PasswordHash: h})
 }
 func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error) {
 	e, err := canonicalEmail(in.Email)
@@ -41,13 +45,13 @@ func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error)
 	if err != nil {
 		return LoginResult{}, err
 	}
-	id, err := newToken()
+	id, err := newIdentifier()
 	if err != nil {
 		return LoginResult{}, err
 	}
 	now := s.now()
 	exp := now.Add(s.ttl)
-	if err = s.repo.CreateSession(ctx, AuthSession{ID: id[5:], UserID: u.User.ID, TokenDigest: tokenDigest(raw), CreatedAt: now, ExpiresAt: exp}); err != nil {
+	if err = s.repo.CreateSession(ctx, AuthSession{ID: id, UserID: u.User.ID, TokenDigest: tokenDigest(raw), CreatedAt: now, ExpiresAt: exp}); err != nil {
 		return LoginResult{}, err
 	}
 	return LoginResult{User: u.User, Token: raw, TokenType: "Bearer", ExpiresAt: exp}, nil
