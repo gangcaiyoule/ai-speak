@@ -162,7 +162,13 @@ final class _PlanSummary extends StatelessWidget {
             Text('状态：${plan.status}'),
             const SizedBox(height: 12),
             FilledButton.icon(
-              onPressed: onStartSession == null ? null : () => onStartSession!(plan),
+              onPressed: () {
+                if (onStartSession != null) {
+                  onStartSession!(plan);
+                  return;
+                }
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('练习会话功能将在后续流程接入。')));
+              },
               icon: const Icon(Icons.play_arrow),
               label: const Text('开始会话'),
             ),
