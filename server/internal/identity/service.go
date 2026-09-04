@@ -2,135 +2,73 @@ package identity
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
-	"encoding/base64"
-	"errors"
-	"strings"
-	"unicode/utf8"
-
-	"golang.org/x/crypto/argon2"
+	"time"
 )
 
-// Service 实现注册、登录、当前用户查询和退出登录用例。
 type Service struct {
-	users    UserRepository
-	sessions SessionRepository
+	repo Repository
+	now  func() time.Time
+	ttl  time.Duration
 }
 
-// NewService 创建使用指定仓库的认证服务。
-func NewService(users UserRepository, sessions SessionRepository) (*Service, error) {
-	if users == nil || sessions == nil {
-		return nil, errors.New("identity: repository is required")
-	}
-	return &Service{users: users, sessions: sessions}, nil
+func NewService(repo Repository) *Service {
+	return &Service{repo: repo, now: time.Now, ttl: 30 * 24 * time.Hour}
 }
-
-func (s *Service) Register(ctx context.Context, input RegisterInput) (Session, error) {
-	email, err := normalizeEmail(input.Email)
-	if err != nil || !validPassword(input.Password) {
-		return Session{}, ErrInvalidRequest
-	}
-	hash, err := hashPassword(input.Password)
+func (s *Service) Register(ctx context.Context, in RegisterInput) (User, error) {
+	e, err := canonicalEmail(in.Email)
 	if err != nil {
-		return Session{}, err
+		return User{}, err
 	}
-	user := User{ID: newID("usr"), Email: email}
-	if _, err = s.users.CreateWithPasswordHash(ctx, StoredUser{User: user, PasswordHash: hash}); err != nil {
-		return Session{}, err
+	if err = validatePassword(in.Password); err != nil {
+		return User{}, err
 	}
-	return s.createSession(ctx, user)
-}
-
-func (s *Service) Login(ctx context.Context, input LoginInput) (Session, error) {
-	email, err := normalizeEmail(input.Email)
-	if err != nil || input.Password == "" {
-		return Session{}, ErrInvalidRequest
-	}
-	stored, err := s.users.FindByEmailWithPasswordHash(ctx, email)
+	h, err := hashPassword(in.Password)
 	if err != nil {
-		return Session{}, ErrInvalidCredentials
+		return User{}, err
 	}
-	ok, err := verifyPassword(input.Password, stored.PasswordHash)
-	if err != nil || !ok {
-		return Session{}, ErrInvalidCredentials
-	}
-	return s.createSession(ctx, stored.User)
-}
-
-func (s *Service) Logout(ctx context.Context, sessionID string) error {
-	if sessionID == "" {
-		return ErrUnauthorized
-	}
-	session, err := s.sessions.FindByTokenDigest(ctx, sessionID)
+	id, err := newIdentifier()
 	if err != nil {
-		return ErrUnauthorized
+		return User{}, err
 	}
-	return s.sessions.Delete(ctx, session.ID)
+	return s.repo.CreateWithPasswordHash(ctx, StoredUser{User: User{ID: id, Email: e}, PasswordHash: h})
 }
-
-func (s *Service) CurrentUser(ctx context.Context, sessionID string) (User, error) {
-	if sessionID == "" {
-		return User{}, ErrUnauthorized
-	}
-	session, err := s.sessions.FindByTokenDigest(ctx, sessionID)
-	if err != nil || session.User.ID == "" {
-		return User{}, ErrUnauthorized
-	}
-	return s.users.FindByID(ctx, session.User.ID)
-}
-
-func (s *Service) createSession(ctx context.Context, user User) (Session, error) {
-	tokenBytes := make([]byte, 32)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return Session{}, err
-	}
-	token := "sess_" + base64.RawURLEncoding.EncodeToString(tokenBytes)
-	session := Session{ID: newID("ses"), User: user, Token: token}
-	return s.sessions.Create(ctx, session)
-}
-
-func newID(prefix string) string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		panic(err)
-	}
-	return prefix + "_" + base64.RawURLEncoding.EncodeToString(b)
-}
-
-func normalizeEmail(value string) (string, error) {
-	value = strings.ToLower(strings.TrimSpace(value))
-	if !utf8.ValidString(value) || len(value) < 3 || !strings.Contains(value, "@") {
-		return "", ErrInvalidRequest
-	}
-	return value, nil
-}
-func validPassword(value string) bool {
-	n := utf8.RuneCountInString(value)
-	return utf8.ValidString(value) && n >= 8 && n <= 128
-}
-
-func hashPassword(password string) (string, error) {
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		return "", err
-	}
-	hash := argon2.IDKey([]byte(password), salt, 3, 64*1024, 2, 32)
-	return "$argon2id$" + base64.RawStdEncoding.EncodeToString(salt) + "$" + base64.RawStdEncoding.EncodeToString(hash), nil
-}
-func verifyPassword(password, encoded string) (bool, error) {
-	parts := strings.Split(encoded, "$")
-	if len(parts) != 4 || parts[1] != "argon2id" {
-		return false, ErrInvalidRequest
-	}
-	salt, err := base64.RawStdEncoding.DecodeString(parts[2])
+func (s *Service) Login(ctx context.Context, in LoginInput) (LoginResult, error) {
+	e, err := canonicalEmail(in.Email)
 	if err != nil {
-		return false, err
+		return LoginResult{}, ErrInvalidCredentials
 	}
-	expected, err := base64.RawStdEncoding.DecodeString(parts[3])
+	u, err := s.repo.FindByEmailWithPasswordHash(ctx, e)
+	if err != nil || !verifyPassword(u.PasswordHash, in.Password) {
+		return LoginResult{}, ErrInvalidCredentials
+	}
+	raw, err := newToken()
 	if err != nil {
-		return false, err
+		return LoginResult{}, err
 	}
-	actual := argon2.IDKey([]byte(password), salt, 3, 64*1024, 2, uint32(len(expected)))
-	return subtle.ConstantTimeCompare(actual, expected) == 1, nil
+	id, err := newIdentifier()
+	if err != nil {
+		return LoginResult{}, err
+	}
+	now := s.now()
+	exp := now.Add(s.ttl)
+	if err = s.repo.CreateSession(ctx, AuthSession{ID: id, UserID: u.User.ID, TokenDigest: tokenDigest(raw), CreatedAt: now, ExpiresAt: exp}); err != nil {
+		return LoginResult{}, err
+	}
+	return LoginResult{User: u.User, Token: raw, TokenType: "Bearer", ExpiresAt: exp}, nil
+}
+func (s *Service) Authenticate(ctx context.Context, raw string) (Actor, error) {
+	if !validToken(raw) {
+		return Actor{}, ErrUnauthorized
+	}
+	sess, err := s.repo.FindSessionByTokenDigest(ctx, tokenDigest(raw))
+	if err != nil || sess.RevokedAt != nil || !s.now().Before(sess.ExpiresAt) {
+		return Actor{}, ErrUnauthorized
+	}
+	return Actor{UserID: sess.UserID, SessionID: sess.ID}, nil
+}
+func (s *Service) CurrentUser(ctx context.Context, id string) (User, error) {
+	return s.repo.FindByID(ctx, id)
+}
+func (s *Service) Logout(ctx context.Context, id string) error {
+	return s.repo.RevokeSession(ctx, id, s.now())
 }

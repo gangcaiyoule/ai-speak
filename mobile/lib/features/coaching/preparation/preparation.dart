@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../scene/scene.dart';
+import '../practice_plan/practice_plan.dart';
 import 'preparation_controller.dart';
 
 final class PreparationPage extends StatefulWidget {
-  const PreparationPage({required this.controller, this.onSelectionComplete, super.key});
+  const PreparationPage({required this.controller, this.onSelectionComplete, this.onStartSession, super.key});
 
   final PreparationController controller;
   final ValueChanged<SceneSelectionSnapshot>? onSelectionComplete;
+  final ValueChanged<PracticePlan>? onStartSession;
 
   @override
   State<PreparationPage> createState() => _PreparationPageState();
@@ -35,7 +37,7 @@ class _PreparationPageState extends State<PreparationPage> {
   Widget build(BuildContext context) {
     final detail = controller.detail;
     return Scaffold(
-      appBar: AppBar(title: const Text('Practice')),
+      appBar: AppBar(title: Text(controller.selectedScene == null ? 'Practice' : '练习准备')),
       body: controller.selectedScene == null
           ? _buildCatalog(context)
           : _buildDetail(context, detail),
@@ -112,10 +114,19 @@ class _PreparationPageState extends State<PreparationPage> {
             )),
         const SizedBox(height: 16),
         FilledButton.icon(
-          onPressed: controller.hasCompleteSelection ? () => _complete(context) : null,
+          onPressed: controller.hasCompleteSelection && !controller.isCreatingPlan ? () => _complete(context) : null,
           icon: const Icon(Icons.play_arrow),
-          label: const Text('开始练习'),
+          label: const Text('进入练习准备'),
         ),
+        if (controller.createdPlan != null) ...[
+          _PlanSummary(plan: controller.createdPlan!, onStartSession: widget.onStartSession),
+        ] else if (controller.hasCompleteSelection && controller.planClient != null) ...[
+          const SizedBox(height: 16),
+          TextField(decoration: const InputDecoration(labelText: '本次练习目标', hintText: '例如：用更清晰的结构回答问题'), onChanged: controller.setObjective),
+          if (controller.planErrorMessage != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(controller.planErrorMessage!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+          const SizedBox(height: 8),
+          FilledButton.icon(onPressed: controller.objective.trim().isNotEmpty && !controller.isCreatingPlan ? () => _createPlan(context) : null, icon: controller.isCreatingPlan ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.check), label: const Text('保存并进入准备')),
+        ],
       ],
     );
   }
@@ -124,8 +135,46 @@ class _PreparationPageState extends State<PreparationPage> {
     final result = controller.selectionResult;
     if (result == null) return;
     widget.onSelectionComplete?.call(result);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('场景选择已完成，可以进入准备流程。')));
+    if (controller.planClient == null) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('场景选择已完成，可以进入准备流程。')));
   }
+
+  Future<void> _createPlan(BuildContext context) async {
+    final plan = await controller.createPlan();
+    if (!mounted || plan == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('练习计划已创建。')));
+  }
+}
+
+final class _PlanSummary extends StatelessWidget {
+  const _PlanSummary({required this.plan, this.onStartSession});
+
+  final PracticePlan plan;
+  final ValueChanged<PracticePlan>? onStartSession;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('练习计划已创建', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text('目标：${plan.objective}'),
+            Text('状态：${plan.status}'),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () {
+                if (onStartSession != null) {
+                  onStartSession!(plan);
+                  return;
+                }
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('练习会话功能将在后续流程接入。')));
+              },
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('开始会话'),
+            ),
+          ]),
+        ),
+      );
 }
 
 final class _Section extends StatelessWidget {

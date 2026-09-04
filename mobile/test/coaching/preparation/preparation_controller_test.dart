@@ -1,7 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:ai_speak/features/coaching/preparation/preparation.dart';
 import 'package:ai_speak/features/coaching/preparation/preparation_controller.dart';
 import 'package:ai_speak/features/coaching/scene/scene.dart';
 import 'package:ai_speak/features/coaching/scene/scene_client.dart';
+import 'package:ai_speak/features/coaching/practice_plan/practice_plan.dart';
+import 'package:ai_speak/features/coaching/practice_plan/practice_plan_client.dart';
 
 void main() {
   test('loads scenes in the client-provided order', () async {
@@ -89,6 +93,50 @@ void main() {
     expect(result.selectedRoleIds, ['role-1']);
     expect(result.practiceOptionId, 'full');
   });
+
+  test('creates a plan from the completed scene selection and objective', () async {
+    final scene = _scene('scene');
+    final plans = _FakePlanClient();
+    final controller = PreparationController(client: _FakeClient([scene], details: {'scene': scene}), planClient: plans);
+    await controller.loadIfNeeded();
+    await controller.selectScene(scene);
+    controller.selectRole(controller.roles.first);
+    controller.selectOption(controller.availableOptions.first);
+    controller.setObjective('Answer with STAR structure');
+
+    final plan = await controller.createPlan();
+
+    expect(plan?.objective, 'Answer with STAR structure');
+    expect(plans.lastSelection?.scene.id, 'scene');
+    expect(controller.createdPlan?.status, 'DRAFT');
+  });
+
+  testWidgets('shows plan summary and dispatches start-session callback after creation', (tester) async {
+    final scene = _scene('scene');
+    final controller = PreparationController(
+      client: _FakeClient([scene], details: {'scene': scene}),
+      planClient: _FakePlanClient(),
+    );
+    await controller.loadIfNeeded();
+    await controller.selectScene(scene);
+    controller.selectRole(controller.roles.first);
+    controller.selectOption(controller.availableOptions.first);
+    controller.setObjective('Answer with STAR structure');
+    PracticePlan? started;
+
+    await tester.pumpWidget(MaterialApp(
+      home: PreparationPage(controller: controller, onStartSession: (plan) => started = plan),
+    ));
+    await tester.pump();
+    await tester.tap(find.text('保存并进入准备'));
+    await tester.pump();
+
+    expect(find.text('练习计划已创建'), findsOneWidget);
+    expect(find.text('目标：Answer with STAR structure'), findsOneWidget);
+    expect(find.text('开始会话'), findsOneWidget);
+    await tester.tap(find.text('开始会话'));
+    expect(started?.id, 'plan-1');
+  });
 }
 
 final class _FakeClient implements SceneClient {
@@ -111,6 +159,18 @@ final class _FakeClient implements SceneClient {
 
   @override
   Future<SceneDefinition> getScene(String sceneId) async => details[sceneId] ?? scenes.firstWhere((scene) => scene.id == sceneId);
+}
+
+final class _FakePlanClient implements PracticePlanClient {
+  SceneSelectionSnapshot? lastSelection;
+  @override
+  Future<PracticePlan> createPlan({required SceneSelectionSnapshot selection, required String objective}) async {
+    lastSelection = selection;
+    return PracticePlan(id: 'plan-1', sceneId: selection.scene.id, sceneVersion: selection.scene.version, roleId: selection.selectedRoleIds.single, practiceOptionId: selection.practiceOptionId, objective: objective, status: 'DRAFT');
+  }
+  @override Future<PracticePlan> archivePlan(String id) => throw UnimplementedError();
+  @override Future<PracticePlan> getPlan(String id) => throw UnimplementedError();
+  @override Future<List<PracticePlan>> listPlans() => throw UnimplementedError();
 }
 
 SceneDefinition _scene(String id, {int version = 1, int roles = 1}) {

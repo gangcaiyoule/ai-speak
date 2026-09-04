@@ -1,21 +1,48 @@
 package identity
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-// TestHTTPHandlerRegisterRoutes 验证身份路由能够返回结构化占位响应。
-func TestHTTPHandlerRegisterRoutes(t *testing.T) {
+func TestAuthHTTPFlow(t *testing.T) {
+	repo := NewMemoryRepository()
+	h := NewHTTPHandler(NewService(repo))
 	mux := http.NewServeMux()
-	NewHTTPHandler(StubAuthService{}).RegisterRoutes(mux)
-	request := httptest.NewRequest(http.MethodPost, "/v1/auth/login", strings.NewReader(`{"email":"a@b.com","password":"password"}`))
-	request.Header.Set("Content-Type", "application/json")
-	recording := httptest.NewRecorder()
-	mux.ServeHTTP(recording, request)
-	if recording.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", recording.Code, http.StatusInternalServerError)
+	h.RegisterRoutes(mux)
+	req := httptest.NewRequest(http.MethodPost, "/v1/auth/register", strings.NewReader(`{"email":" User@Example.com ","password":"password123"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 201 {
+		t.Fatalf("register=%d", rec.Code)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/v1/auth/login", strings.NewReader(`{"email":"user@example.com","password":"password123"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("login=%d", rec.Code)
+	}
+	var result LoginResult
+	if json.NewDecoder(rec.Body).Decode(&result) != nil || result.Token == "" {
+		t.Fatal("missing token")
+	}
+	req = httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+	req.Header.Set("Authorization", "Bearer "+result.Token)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("me=%d", rec.Code)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/v1/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+result.Token)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 204 {
+		t.Fatalf("logout=%d", rec.Code)
 	}
 }

@@ -7,113 +7,115 @@ import (
 	"strings"
 )
 
-// HTTPHandler 通过 REST 暴露身份相关用例。
 type HTTPHandler struct{ service AuthService }
 
-// NewHTTPHandler 使用认证服务创建 HTTP 处理器。
-func NewHTTPHandler(service AuthService) *HTTPHandler { return &HTTPHandler{service: service} }
-
-// RegisterRoutes 注册注册、登录、退出和当前用户路由。
+func NewHTTPHandler(s AuthService) *HTTPHandler { return &HTTPHandler{service: s} }
 func (h *HTTPHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/auth/register", h.register)
 	mux.HandleFunc("POST /v1/auth/login", h.login)
 	mux.HandleFunc("POST /v1/auth/logout", h.logout)
 	mux.HandleFunc("GET /v1/me", h.currentUser)
 }
-
 func (h *HTTPHandler) register(w http.ResponseWriter, r *http.Request) {
-	var input RegisterInput
-	if !decodeJSON(w, r, &input) {
+	var in RegisterInput
+	if !decodeJSON(w, r, &in) {
 		return
 	}
-	session, err := h.service.Register(r.Context(), input)
-	if err != nil {
-		writeIdentityError(w, err)
+	u, e := h.service.Register(r.Context(), in)
+	if e != nil {
+		writeErr(w, e)
 		return
 	}
-	writeJSON(w, http.StatusCreated, session)
+	writeJSON(w, http.StatusCreated, map[string]User{"user": u})
 }
-
 func (h *HTTPHandler) login(w http.ResponseWriter, r *http.Request) {
-	var input LoginInput
-	if !decodeJSON(w, r, &input) {
+	var in LoginInput
+	if !decodeJSON(w, r, &in) {
 		return
 	}
-	session, err := h.service.Login(r.Context(), input)
-	if err != nil {
-		writeIdentityError(w, err)
+	v, e := h.service.Login(r.Context(), in)
+	if e != nil {
+		writeErr(w, e)
 		return
 	}
-	writeJSON(w, http.StatusOK, session)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, v)
 }
-
 func (h *HTTPHandler) logout(w http.ResponseWriter, r *http.Request) {
-	token, ok := bearerToken(r)
+	t, ok := bearerToken(r)
 	if !ok {
-		writeIdentityError(w, ErrUnauthorized)
+		writeErr(w, ErrUnauthorized)
 		return
 	}
-	if err := h.service.Logout(r.Context(), token); err != nil {
-		writeIdentityError(w, err)
+	a, e := h.service.Authenticate(r.Context(), t)
+	if e != nil {
+		writeErr(w, e)
+		return
+	}
+	if e = h.service.Logout(r.Context(), a.SessionID); e != nil {
+		writeErr(w, e)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
-
 func (h *HTTPHandler) currentUser(w http.ResponseWriter, r *http.Request) {
-	token, ok := bearerToken(r)
+	t, ok := bearerToken(r)
 	if !ok {
-		writeIdentityError(w, ErrUnauthorized)
+		writeErr(w, ErrUnauthorized)
 		return
 	}
-	user, err := h.service.CurrentUser(r.Context(), token)
-	if err != nil {
-		writeIdentityError(w, err)
+	a, e := h.service.Authenticate(r.Context(), t)
+	if e != nil {
+		writeErr(w, e)
 		return
 	}
-	writeJSON(w, http.StatusOK, user)
+	u, e := h.service.CurrentUser(r.Context(), a.UserID)
+	if e != nil {
+		writeErr(w, e)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]User{"user": u})
 }
-
 func bearerToken(r *http.Request) (string, bool) {
-	parts := strings.Fields(r.Header.Get("Authorization"))
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") || !strings.HasPrefix(parts[1], "sess_") {
+	p := strings.Fields(r.Header.Get("Authorization"))
+	if len(p) != 2 || !strings.EqualFold(p[0], "Bearer") || !validToken(p[1]) {
 		return "", false
 	}
-	return parts[1], true
+	return p[1], true
 }
-
-func decodeJSON(w http.ResponseWriter, r *http.Request, target any) bool {
+func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		writeIdentityError(w, ErrInvalidRequest)
+		writeErr(w, ErrInvalidRequest)
 		return false
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
-	if err := decoder.Decode(target); err != nil {
-		writeIdentityError(w, ErrInvalidRequest)
+	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+	d.DisallowUnknownFields()
+	if d.Decode(v) != nil {
+		writeErr(w, ErrInvalidRequest)
 		return false
 	}
 	return true
 }
-
-func writeJSON(w http.ResponseWriter, status int, value any) {
+func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(value); err != nil {
-		panic(err)
-	}
+	_ = json.NewEncoder(w).Encode(v)
 }
-
-func writeIdentityError(w http.ResponseWriter, err error) {
+func writeErr(w http.ResponseWriter, e error) {
 	status, code := http.StatusInternalServerError, "internal_error"
 	switch {
-	case errors.Is(err, ErrInvalidRequest):
+	case errors.Is(e, ErrInvalidRequest):
 		status, code = http.StatusBadRequest, "invalid_request"
-	case errors.Is(err, ErrConflict):
-		status, code = http.StatusConflict, "registration_unavailable"
-	case errors.Is(err, ErrInvalidCredentials):
+	case errors.Is(e, ErrConflict):
+		status, code = http.StatusConflict, "account_registration_unavailable"
+	case errors.Is(e, ErrInvalidCredentials):
 		status, code = http.StatusUnauthorized, "invalid_credentials"
-	case errors.Is(err, ErrUnauthorized):
+	case errors.Is(e, ErrUnauthorized):
 		status, code = http.StatusUnauthorized, "authentication_required"
 	}
-	writeJSON(w, status, map[string]string{"code": code, "message": code})
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+	}
+	writeJSON(w, status, map[string]any{"error": map[string]any{"code": code, "message": code, "retryable": status >= 500}})
 }
