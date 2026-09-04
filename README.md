@@ -1,31 +1,27 @@
-# ai-speak
+# SpeakUp：AI 英语口语陪练系统
 
+## 一、立项背景与目标
 
-最小本地运行骨架：Flutter 客户端、Go HTTP Server 和 PostgreSQL。
+针对英语学习者缺少真实语境、反馈笼统及难复练的痛点，SpeakUp 基于 Flutter 与 Go 构建 AI 口语陪练系统。聚焦岗位面试、IELTS 模考与职场场景，提供低延迟实时语音交互、原话证据分析与版本化复练。
 
-## 启动 PostgreSQL
+## 二、系统架构与技术选型
 
-```shell
-docker compose up -d postgres
-```
+- **客户端**：Flutter 跨平台 App，负责场景交互、状态管理与音频集成。
+- **服务端**：Go (Gin) 模块化后端，处理业务编排、长连接与模型接入。
+- **数据层**：PostgreSQL 持久化用户、场景、会话轮次与评测报告。
+- **语音链路**：自研跨平台 C ABI 采集/播放 + SPSC 环缓 + WSS 实时流。
 
-## 启动 Go Server
+## 三、团队分工
 
-```shell
-cd server
-go run ./cmd/migrate
-go run ./cmd/server
-```
+按业务模块纵向贯通分工，各成员对所负责模块的端到端实现与测试负责：
 
-数据库迁移按 `server/migrations/NNNN_description.sql` 命名，并通过
-`schema_migrations` 记录已执行版本。运行迁移命令前必须设置 `DATABASE_URL`。
+- **张思成（24320106，组长）**：负责用户账户与个人中心（注册登录、鉴权与资料）。
+- **叶俊博（24320114）**：负责场景选择与练习准备（场景筛选、目标设定与状态流转）。
+- **陈冠亨（24320121）**：负责 **AI 对话与实时语音链路（`voice_stream`）**——独立实现跨平台采集播放底座（C ABI、Oboe、RemoteIO）、SPSC 零拷贝环缓、切帧编解码、WSS 回声链路、会话状态机及 Codespaces 云端验证环境。
+- **裘之语（24320117）**：负责练习报告与复盘模块（多维评测、表达建议与复练对比）。
 
-健康检查：`http://127.0.0.1:8080/health`。
+## 四、快速启动
 
-## 启动 Flutter
-
-```shell
-cd mobile
-flutter pub get
-flutter run
-```
+1. **DB**：`docker compose up -d postgres`
+2. **Server**：`cd server && go run ./cmd/migrate && go run ./cmd/server`
+3. **Flutter**：`cd mobile && flutter pub get && flutter run`
