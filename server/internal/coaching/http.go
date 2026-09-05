@@ -64,6 +64,7 @@ func (h *HTTPHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/practice-plans/{plan_id}", h.getPlan)
 	mux.HandleFunc("POST /v1/practice-plans/{plan_id}/archive", h.archivePlan)
 	mux.HandleFunc("POST /v1/practice-sessions", h.createSession)
+	mux.HandleFunc("GET /v1/practice-sessions/resumable", h.getResumableSession)
 	mux.HandleFunc("GET /v1/practice-sessions/{session_id}", h.getSession)
 	mux.HandleFunc("GET /v1/practice-sessions/{session_id}/current-question", h.getCurrentQuestion)
 	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/activation", h.activateSession)
@@ -73,6 +74,23 @@ func (h *HTTPHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/practice-sessions/{session_id}/evaluation", h.getSessionEvaluation)
 	mux.HandleFunc("GET /v1/evaluation-reports/{report_id}", h.getEvaluationReport)
 	mux.HandleFunc("GET /v1/evaluation-reports", h.listEvaluationReports)
+}
+
+func (h *HTTPHandler) getResumableSession(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	session, err := h.sessions.GetLatestResumableSession(r.Context(), actorID)
+	if errors.Is(err, practice.ErrSessionNotFound) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"session": session})
 }
 
 func (h *HTTPHandler) getSessionEvaluation(w http.ResponseWriter, r *http.Request) {

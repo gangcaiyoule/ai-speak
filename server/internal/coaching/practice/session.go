@@ -82,6 +82,7 @@ type CreateSessionInput struct {
 type SessionRepository interface {
 	CreateSession(context.Context, Session, []Question) (Session, error)
 	FindSession(context.Context, string, string) (Session, error)
+	FindLatestResumableSession(context.Context, string) (Session, error)
 	ActivateSession(context.Context, string, string, time.Time) (Session, error)
 	CompleteSession(context.Context, string, string, time.Time) (Session, error)
 	SubmitTextAnswer(context.Context, string, string, SubmitTextAnswerInput, time.Time) (PracticeTurn, error)
@@ -91,6 +92,7 @@ type SessionRepository interface {
 type SessionService interface {
 	CreateSession(context.Context, string, CreateSessionInput) (Session, error)
 	GetSession(context.Context, string, string) (Session, error)
+	GetLatestResumableSession(context.Context, string) (Session, error)
 	GetCurrentQuestion(context.Context, string, string) (Question, error)
 	ActivateSession(context.Context, string, string) (Session, error)
 	SubmitTextAnswer(context.Context, string, string, SubmitTextAnswerInput) (PracticeTurn, error)
@@ -168,6 +170,17 @@ func (s *sessionService) GetSession(ctx context.Context, actorID, sessionID stri
 		return Session{}, ErrSessionNotFound
 	}
 	session, err := s.repo.FindSession(ctx, actorID, sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	return withCurrentQuestion(session), nil
+}
+
+func (s *sessionService) GetLatestResumableSession(ctx context.Context, actorID string) (Session, error) {
+	if strings.TrimSpace(actorID) == "" {
+		return Session{}, ErrSessionNotFound
+	}
+	session, err := s.repo.FindLatestResumableSession(ctx, actorID)
 	if err != nil {
 		return Session{}, err
 	}
@@ -286,6 +299,28 @@ func (r *MemorySessionRepository) FindSession(ctx context.Context, actorID, sess
 		return Session{}, ErrSessionNotFound
 	}
 	return withQuestions(session, r.questions[sessionID]), nil
+}
+
+func (r *MemorySessionRepository) FindLatestResumableSession(ctx context.Context, actorID string) (Session, error) {
+	if err := contextError(ctx); err != nil {
+		return Session{}, err
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var selected *Session
+	for _, candidate := range r.sessions {
+		if candidate.ActorID != actorID || (candidate.Status != SessionStatusDraft && candidate.Status != SessionStatusActive) {
+			continue
+		}
+		if selected == nil || candidate.UpdatedAt.After(selected.UpdatedAt) || (candidate.UpdatedAt.Equal(selected.UpdatedAt) && candidate.ID > selected.ID) {
+			value := candidate
+			selected = &value
+		}
+	}
+	if selected == nil {
+		return Session{}, ErrSessionNotFound
+	}
+	return withQuestions(*selected, r.questions[selected.ID]), nil
 }
 
 func (r *MemorySessionRepository) ActivateSession(ctx context.Context, actorID, sessionID string, now time.Time) (Session, error) {
