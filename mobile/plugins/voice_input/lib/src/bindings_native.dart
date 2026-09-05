@@ -45,26 +45,26 @@ DynamicLibrary _defaultLibrary() {
 final class FfiVoiceInputBindings implements VoiceInputBindings {
   /// @brief 构造绑定；缺省按平台自动选择库句柄。
   ///
+  /// 符号查找全部惰性（late final 字段初始化器）：构造只选库句柄不做
+  /// 查找，宿主无 libvoice_input.so 时（如 VM 单测）构造仍成立，首次
+  /// 调用才解析符号。
+  ///
   /// @param library 已打开的动态库；测试可注入。
   FfiVoiceInputBindings({DynamicLibrary? library})
-      : _lib = library ?? _defaultLibrary() {
-    _viStart =
-        _lib.lookupFunction<ViStartNative, ViStartDart>('vi_start');
-    _viStop = _lib.lookupFunction<ViStopNative, ViStopDart>('vi_stop');
-    _viRead = _lib.lookupFunction<ViReadNative, ViReadDart>('vi_read');
-    _viDropped =
-        _lib.lookupFunction<ViDroppedNative, ViDroppedDart>('vi_dropped');
-    _viFormat =
-        _lib.lookupFunction<ViFormatNative, ViFormatDart>('vi_format');
-  }
+      : _lib = library ?? _defaultLibrary();
 
   final DynamicLibrary _lib;
 
-  late final ViStartDart _viStart;
-  late final ViStopDart _viStop;
-  late final ViReadDart _viRead;
-  late final ViDroppedDart _viDropped;
-  late final ViFormatDart _viFormat;
+  late final ViStartDart _viStart =
+      _lib.lookupFunction<ViStartNative, ViStartDart>('vi_start');
+  late final ViStopDart _viStop =
+      _lib.lookupFunction<ViStopNative, ViStopDart>('vi_stop');
+  late final ViReadDart _viRead =
+      _lib.lookupFunction<ViReadNative, ViReadDart>('vi_read');
+  late final ViDroppedDart _viDropped =
+      _lib.lookupFunction<ViDroppedNative, ViDroppedDart>('vi_dropped');
+  late final ViFormatDart _viFormat =
+      _lib.lookupFunction<ViFormatNative, ViFormatDart>('vi_format');
 
   Pointer<ViConfig>? _config;
   Pointer<Uint8>? _readBuffer;
@@ -137,32 +137,28 @@ final class FfiVoiceInputBindings implements VoiceInputBindings {
 final class FfiVoiceOutputBindings implements VoiceOutputBindings {
   /// @brief 构造绑定；缺省按平台自动选择库句柄。
   ///
+  /// 符号查找全部惰性（late final 字段初始化器），语义同采集端。
+  ///
   /// @param library 已打开的动态库；测试可注入。
   FfiVoiceOutputBindings({DynamicLibrary? library})
-      : _lib = library ?? _defaultLibrary() {
-    _voStart =
-        _lib.lookupFunction<VoStartNative, VoStartDart>('vo_start');
-    _voStop = _lib.lookupFunction<VoStopNative, VoStopDart>('vo_stop');
-    _voWrite = _lib.lookupFunction<VoWriteNative, VoWriteDart>('vo_write');
-    _voBuffered =
-        _lib.lookupFunction<VoBufferedNative, VoBufferedDart>('vo_buffered');
-    _voUnderrun =
-        _lib.lookupFunction<VoUnderrunNative, VoUnderrunDart>('vo_underrun');
-    _voDropped =
-        _lib.lookupFunction<VoDroppedNative, VoDroppedDart>('vo_dropped');
-    _voFormat =
-        _lib.lookupFunction<VoFormatNative, VoFormatDart>('vo_format');
-  }
+      : _lib = library ?? _defaultLibrary();
 
   final DynamicLibrary _lib;
 
-  late final VoStartDart _voStart;
-  late final VoStopDart _voStop;
-  late final VoWriteDart _voWrite;
-  late final VoBufferedDart _voBuffered;
-  late final VoUnderrunDart _voUnderrun;
-  late final VoDroppedDart _voDropped;
-  late final VoFormatDart _voFormat;
+  late final VoStartDart _voStart =
+      _lib.lookupFunction<VoStartNative, VoStartDart>('vo_start');
+  late final VoStopDart _voStop =
+      _lib.lookupFunction<VoStopNative, VoStopDart>('vo_stop');
+  late final VoWriteDart _voWrite =
+      _lib.lookupFunction<VoWriteNative, VoWriteDart>('vo_write');
+  late final VoBufferedDart _voBuffered =
+      _lib.lookupFunction<VoBufferedNative, VoBufferedDart>('vo_buffered');
+  late final VoUnderrunDart _voUnderrun =
+      _lib.lookupFunction<VoUnderrunNative, VoUnderrunDart>('vo_underrun');
+  late final VoDroppedDart _voDropped =
+      _lib.lookupFunction<VoDroppedNative, VoDroppedDart>('vo_dropped');
+  late final VoFormatDart _voFormat =
+      _lib.lookupFunction<VoFormatNative, VoFormatDart>('vo_format');
 
   Pointer<VoConfig>? _config;
   Pointer<Uint8>? _writeBuffer;
