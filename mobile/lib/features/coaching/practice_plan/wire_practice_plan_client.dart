@@ -6,13 +6,6 @@ import '../scene/scene.dart';
 import 'practice_plan.dart';
 import 'practice_plan_client.dart';
 
-final class PracticePlanClientException implements Exception {
-  const PracticePlanClientException(this.message, [this.statusCode]);
-  final String message;
-  final int? statusCode;
-  @override String toString() => message;
-}
-
 final class WirePracticePlanClient implements PracticePlanClient {
   WirePracticePlanClient({required Uri baseUri, required Future<String?> Function() tokenProvider}) : _baseUri = baseUri, _tokenProvider = tokenProvider;
   final Uri _baseUri;

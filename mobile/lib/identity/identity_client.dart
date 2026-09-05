@@ -19,7 +19,7 @@ final class WireIdentityClient implements IdentityClient {
   @override Future<void> logout() async { final token=await _activeToken(); try { if(token!=null){ final r=await _request('POST','/v1/auth/logout',token:token); if(r.statusCode!=204&&r.statusCode!=401) throw _error(r); } } finally { await _clearToken(); } }
   Future<String?> _activeToken() async=>_token??=await _store.readToken();
   Future<void> _clearToken() async{_token=null;await _store.deleteToken();}
-  Future<_Response> _request(String method,String path,{Map<String,Object?>? body,String? token}) async { final request=http.Request(method,_baseUri.resolve(path))..headers['content-type']='application/json'; if(token!=null)request.headers['authorization']='Bearer $token'; if(body!=null)request.write(jsonEncode(body)); final response=await _http.send(request); return _Response(response.statusCode,await response.stream.bytesToString()); }
+  Future<_Response> _request(String method,String path,{Map<String,Object?>? body,String? token}) async { final request=http.Request(method,_baseUri.resolve(path))..headers['content-type']='application/json'; if(token!=null)request.headers['authorization']='Bearer $token'; if(body!=null)request.body=jsonEncode(body); final response=await _http.send(request); return _Response(response.statusCode,await response.stream.bytesToString()); }
   IdentityClientException _error(_Response r){String message='identity request failed';try{final v=jsonDecode(r.body);if(v is Map&&v['error'] is Map&&v['error']['message'] is String)message=v['error']['message'] as String;}catch(_){ }return IdentityClientException(message,r.statusCode);}
 }
 final class _Response{const _Response(this.statusCode,this.body);final int statusCode;final String body;}

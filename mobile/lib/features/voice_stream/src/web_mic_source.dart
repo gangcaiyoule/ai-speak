@@ -18,7 +18,6 @@ library;
 
 import 'dart:async';
 import 'dart:js_interop';
-import 'dart:typed_data';
 
 import 'package:web/web.dart' as web;
 
@@ -93,7 +92,8 @@ registerProcessor('mic_tap', MicTap);
       _context = context;
 
       final blob = web.Blob(
-        <JSAny?>[_workletCode.toJS].toJS,
+        <JSAny?>[_workletCode.toJS].toJS
+            .unsafeCast<JSArray<web.BlobPart>>(),
         web.BlobPropertyBag(type: 'text/javascript'),
       );
       final url = web.URL.createObjectURL(blob);
@@ -137,7 +137,7 @@ registerProcessor('mic_tap', MicTap);
       return;
     }
     final data = (event as web.MessageEvent).data;
-    final chunk = data.unsafeCast<JSFloat32Array>().toDart;
+    final chunk = data!.unsafeCast<JSFloat32Array>().toDart;
     final bytes = pcm16FromFloat32(chunk);
     for (final frame in slicer.push(bytes)) {
       controller.add(frame);
