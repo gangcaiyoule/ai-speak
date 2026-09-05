@@ -10,11 +10,21 @@ class Scene { /// 创建场景值对象。
 }
 /// 表示一次口语练习会话。
 class PracticeSession { /// 创建练习会话值对象。
-  const PracticeSession({required this.id, required this.status});
+  const PracticeSession({required this.id, required this.status, this.planId = '', this.currentQuestionId, this.currentQuestion});
   /// 服务端分配的会话标识。
   final String id;
   /// 当前练习会话状态。
   final String status;
+  final String planId;
+  final String? currentQuestionId;
+  final PracticeQuestion? currentQuestion;
+}
+class PracticeQuestion {
+  const PracticeQuestion({required this.id, required this.sessionId, required this.position, required this.content});
+  final String id;
+  final String sessionId;
+  final int position;
+  final String content;
 }
 /// 表示一次口语练习的评测报告。
 class EvaluationReport { /// 创建评测报告摘要值对象。
@@ -39,13 +49,14 @@ abstract interface class SceneClient { /// 读取全部可用练习场景。
 /// 定义客户端管理练习会话的操作。
 abstract interface class PracticeClient {
   /// 创建指定场景的练习会话。
-  Future<PracticeSession> createSession(String sceneID);
+  Future<PracticeSession> createSession(String planID);
+  Future<PracticeSession> activateSession(String sessionID);
   /// 读取指定练习会话。
   Future<PracticeSession> getSession(String sessionID);
   /// 向指定练习会话提交文字回答。
-  Future<void> submitTextAnswer(String sessionID, String questionID, String content);
+  Future<PracticeSession> submitTextAnswer(String sessionID, String questionID, String content);
   /// 完成指定练习会话。
-  Future<void> completeSession(String sessionID);
+  Future<PracticeSession> completeSession(String sessionID);
 }
 /// 定义客户端读取练习评测的操作。
 abstract interface class EvaluationClient {
