@@ -1,10 +1,11 @@
 /// @file voice_input.dart
-/// @brief voice_input 插件公共 API：采集与播放的高层控制面。
+/// @brief voice_input 插件公共 API：采集与播放的高层控制面（原生平台）。
 ///
-/// 低层 FFI 绑定见 `src/bindings.dart`；采集（VoiceInput）只暴露启动/停止/
-/// 读出三件事，播放（VoiceOutput）只暴露启动/停止/写入三件事，不做数据
-/// 搬运的语义决策（切帧与 gap 标志在 voice_stream 模块的 [FrameSlicer]
-/// 完成，欠载/丢帧统计由原生 playback_queue 状态机累计）。
+/// 低层 FFI 绑定见 `src/bindings.dart`（条件导出：原生平台走 FFI 实现，
+/// web 平台走桩）；采集（VoiceInput）只暴露启动/停止/读出三件事，播放
+/// （VoiceOutput）只暴露启动/停止/写入三件事，不做数据搬运的语义决策
+/// （切帧与 gap 标志在 voice_stream 模块的 [FrameSlicer] 完成，欠载/丢帧
+/// 统计由原生 playback_queue 状态机累计）。
 library;
 
 import 'dart:async';
@@ -12,14 +13,7 @@ import 'dart:typed_data';
 
 import 'src/bindings.dart';
 
-export 'src/bindings.dart'
-    show
-        VoiceInputBindings,
-        VoiceInputException,
-        FfiVoiceInputBindings,
-        VoiceOutputBindings,
-        VoiceOutputException,
-        FfiVoiceOutputBindings;
+export 'src/bindings.dart';
 
 /// @brief 麦克风采集的高层封装。
 ///
@@ -33,9 +27,9 @@ export 'src/bindings.dart'
 class VoiceInput {
   /// @brief 构造采集器。
   ///
-  /// @param bindings 原生绑定；缺省 FFI 真实实现，测试可注入假绑定。
+  /// @param bindings 原生绑定；缺省按平台工厂创建，测试可注入假绑定。
   VoiceInput({VoiceInputBindings? bindings})
-      : _bindings = bindings ?? FfiVoiceInputBindings();
+      : _bindings = bindings ?? createDefaultInputBindings();
 
   final VoiceInputBindings _bindings;
   bool _running = false;
@@ -99,9 +93,9 @@ class VoiceInput {
 class VoiceOutput {
   /// @brief 构造播放器。
   ///
-  /// @param bindings 原生绑定；缺省 FFI 真实实现，测试可注入假绑定。
+  /// @param bindings 原生绑定；缺省按平台工厂创建，测试可注入假绑定。
   VoiceOutput({VoiceOutputBindings? bindings})
-      : _bindings = bindings ?? FfiVoiceOutputBindings();
+      : _bindings = bindings ?? createDefaultOutputBindings();
 
   final VoiceOutputBindings _bindings;
   bool _running = false;

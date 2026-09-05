@@ -13,10 +13,16 @@ UI（字幕、波形）不在本目录范围内，只预留数据出口。
 | 采集/播放/缓冲 | C（Android 侧 C++，因 Oboe） | 一份实现两端编：NDK 编进 Android，Xcode 直接编进 iOS |
 | iOS 会话激活 | Objective-C++ 壳（约 20 行） | `AVAudioSession` 激活是 iOS 规定动作，AudioUnit 本身是 C API |
 | Dart 侧 | `dart:ffi` 控制面 + 数据出口 | 只拿指针、调开关，不做数据搬运 |
+| web 采集 | Dart（`package:web`，getUserMedia + AudioWorklet） | web 无 dart:ffi 与原生库；浏览器麦克风走 getUserMedia，C 层不参与 |
 | 服务端 | Go（仓库既有） | 复用现有骨架 |
 
 明确不写：Kotlin/Swift 业务逻辑。Android 采集走 Oboe（AAudio 路径），
 不走 Java `AudioRecord`。
+
+平台装配走条件导入（web 打包可编译、原生行为不变）：插件绑定层
+`bindings.dart`（原生 FFI ↔ web 桩）与模块平台工厂
+`src/mic_source_factory.dart`（[NativeMicSource] ↔ [WebMicSource]）。
+web 侧的 Float32→I16 转换在 `src/pcm_convert.dart`（纯函数可单测）。
 
 ## 2. 共享环形缓冲（核心抽象，先行实现）
 
