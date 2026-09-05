@@ -105,6 +105,11 @@ int32_t vi_start(const vi_config_t *cfg) {
 
   oboe::Result result = builder.openManagedStream(g_stream);
   if (result != oboe::Result::OK) {
+    // 很多设备或模拟器对录音输入不支持 Exclusive 独占模式，运行时降级尝试 Shared 共享模式。
+    builder.setSharingMode(oboe::SharingMode::Shared);
+    result = builder.openManagedStream(g_stream);
+  }
+  if (result != oboe::Result::OK) {
     delete g_callback;
     g_callback = nullptr;
     g_storage.clear();

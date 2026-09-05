@@ -114,7 +114,7 @@ partial/final 区分、kind+retryable 失败模型），但只定义抽象，不
 - R6 ✅ 回包链路：WSS echo 打通协议（客户端 `WssEchoTransport` +
   会话适配 `TransportVoiceSession`；服务端 `/ws/voice/echo`）；
   真实云服务接入另行推进
-- R7 AudioSink 播放路径（Oboe 输出流），欠载策略与丢帧统计
+- R7 ◐ AudioSink 播放路径已落地（`NativeAudioSink` + Oboe 输出流 + RemoteIO 渲染回调 + `playback_queue` 欠载状态机）；真机实测待 R8
 - R8 端到端联调：弱网（丢包/延迟注入）下验证传输方案选型与缓冲预算
 
 ## 7. 验证口径

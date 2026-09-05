@@ -1,5 +1,5 @@
 name: voice_input
-description: "voice_stream 采集端平台实现：Oboe（Android）/ RemoteIO（iOS），C ABI 经 dart:ffi 对接。"
+description: "voice_stream 采集/播放端平台实现：Oboe（Android）/ RemoteIO（iOS），C ABI 经 dart:ffi 对接。"
 version: 0.1.0
 homepage:
 
