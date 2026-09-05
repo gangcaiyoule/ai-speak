@@ -393,12 +393,6 @@
       title: "训练记忆",
       description: "记住你的目标、经历、进步与反复出现的卡点。",
     },
-    developer: {
-      slug: "download",
-      label: "下载产品",
-      title: "下载与开源",
-      description: "下载 Android 版本，或在 GitHub 查看 SpeakUp。",
-    },
   };
 
   const chapterIdBySlug = new Map(
@@ -499,7 +493,7 @@
 
   function updateHeader() {
     const homeLink = document.querySelector("h1 a");
-    const topNav = homeLink?.closest("nav");
+    const topNav = homeLink?.closest("header") || homeLink?.closest("nav");
 
     if (homeLink) {
       homeLink.href = PUBLIC_ROUTE;
@@ -562,20 +556,20 @@
       }
     }
 
-    const githubLink = findByExactText(topNav, "a", "Shopify.com");
-    if (githubLink) {
-      setText(githubLink, "GitHub");
-      githubLink.href = GITHUB_URL;
-      githubLink.target = "_blank";
-      githubLink.rel = "noopener noreferrer";
-    }
+    const githubLink =
+      findByExactText(topNav, "a", "Shopify.com") || findByExactText(topNav, "a", "GitHub");
+    if (githubLink) githubLink.remove();
 
-    const downloadLink = findByExactText(topNav, "a", "Start for free");
-    if (downloadLink) {
-      setText(downloadLink, "下载 Android");
-      downloadLink.href = DOWNLOAD_URL;
-      downloadLink.removeAttribute("target");
-    }
+    const downloadLink =
+      findByExactText(topNav, "a", "Start for free") ||
+      findByExactText(topNav, "a", "下载 Android");
+    if (downloadLink) downloadLink.remove();
+
+    // Hydration can restore the rewritten labels before this pass runs again;
+    // remove the two top-nav destinations by their stable URLs as a fallback.
+    topNav
+      .querySelectorAll('a[href*="github.com"], a[href*="/downloads/android/"]')
+      .forEach((link) => link.remove());
   }
 
   function updateEditionPanel() {
@@ -644,6 +638,13 @@
       else link.remove();
     });
     document.getElementById("shipping")?.remove();
+  }
+
+  function removeDownloadSection() {
+    document.querySelectorAll('a[href$="#developer"], a[href$="#download"]').forEach((link) => {
+      if (!link.closest("article")) link.remove();
+    });
+    document.getElementById("developer")?.remove();
   }
 
   function updateChapterIntros() {
@@ -2634,10 +2635,14 @@
       syncPublicAddress();
       bindPublicNavigation();
       updateHeader();
+      document
+        .querySelectorAll('header a[href*="github.com"], header a[href*="/downloads/android/"]')
+        .forEach((link) => link.remove());
       replaceSourceBagLogos();
       truncateAfterSourceDetailBoundary();
       removeAiTeacherSourceSectionsBeforePractice();
       removeLearningProgressSection();
+      removeDownloadSection();
       updateEditionPanel();
       updateAllDirectoryLinks();
       updateChapterIntros();

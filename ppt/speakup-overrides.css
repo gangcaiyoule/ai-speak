@@ -30,6 +30,11 @@ body.speakup-mode #shipping {
   display: none !important;
 }
 
+/* The download/open-source chapter is intentionally removed from Practice. */
+body.speakup-mode #developer {
+  display: none !important;
+}
+
 /* “表达准备” keeps only the authored chapter intro, the Rollouts feature
    geometry, and the existing back-navigation boundary. Hide the legacy media
    and removable source groups before hydration; JS then removes the same
@@ -85,6 +90,12 @@ body.speakup-mode #sidekick-creates-companies,
 body.speakup-mode #sidekick-manages-money,
 body.speakup-mode #sidekick-generates-blocks-for-all-themes,
 body.speakup-mode #sidekick-skills ~ div:has(#sidekick-full-screen) {
+  display: none !important;
+}
+
+/* Keep the compact header focused on navigation and branding. */
+body.speakup-mode header a[href*="github.com"],
+body.speakup-mode header a[href*="/downloads/android/"] {
   display: none !important;
 }
 
