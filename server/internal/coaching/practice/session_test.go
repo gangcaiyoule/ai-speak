@@ -98,6 +98,36 @@ func TestSessionServiceRejectsArchivedPlan(t *testing.T) {
 	}
 }
 
+func TestSessionServiceFindsLatestResumableSessionForActor(t *testing.T) {
+	service, _, plan := newSessionTestService(t)
+	clock := time.Now().UTC()
+	service.(*sessionService).now = func() time.Time {
+		clock = clock.Add(time.Second)
+		return clock
+	}
+	first, err := service.CreateSession(context.Background(), plan.ActorID, CreateSessionInput{PlanID: plan.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.CreateSession(context.Background(), plan.ActorID, CreateSessionInput{PlanID: plan.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ActivateSession(context.Background(), plan.ActorID, second.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := service.GetLatestResumableSession(context.Background(), plan.ActorID)
+	if err != nil || got.ID != second.ID || got.Status != SessionStatusActive || got.CurrentQuestion == nil {
+		t.Fatalf("GetLatestResumableSession() = %#v, %v", got, err)
+	}
+	if _, err := service.GetLatestResumableSession(context.Background(), "another-user"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("cross-user resumable session error = %v, want ErrSessionNotFound", err)
+	}
+	if first.ID == second.ID {
+		t.Fatal("test requires distinct sessions")
+	}
+}
+
 func TestSessionServiceSubmitsAnswersAdvancesQuestionsAndRejectsInvalidOperations(t *testing.T) {
 	service, _, plan := newSessionTestService(t)
 	session, err := service.CreateSession(context.Background(), plan.ActorID, CreateSessionInput{PlanID: plan.ID})

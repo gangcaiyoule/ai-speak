@@ -156,6 +156,28 @@ func (r *PostgresSessionRepository) FindSession(ctx context.Context, actorID, se
 	return withQuestions(session, questions), nil
 }
 
+func (r *PostgresSessionRepository) FindLatestResumableSession(ctx context.Context, actorID string) (Session, error) {
+	if err := contextError(ctx); err != nil {
+		return Session{}, err
+	}
+	if r == nil || r.db == nil {
+		return Session{}, ErrSessionNotFound
+	}
+	query := `SELECT ` + sessionColumns + ` FROM practice_sessions WHERE actor_id=$1 AND status IN ($2,$3) ORDER BY updated_at DESC,id DESC LIMIT 1`
+	session, err := scanPostgresSession(r.db.QueryRowContext(ctx, query, actorID, SessionStatusActive, SessionStatusDraft))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Session{}, ErrSessionNotFound
+	}
+	if err != nil {
+		return Session{}, fmt.Errorf("find resumable practice session: %w", err)
+	}
+	questions, err := listPostgresQuestions(ctx, r.db, actorID, session.ID)
+	if err != nil {
+		return Session{}, err
+	}
+	return withQuestions(session, questions), nil
+}
+
 func (r *PostgresSessionRepository) ActivateSession(ctx context.Context, actorID, sessionID string, now time.Time) (Session, error) {
 	if err := contextError(ctx); err != nil {
 		return Session{}, err

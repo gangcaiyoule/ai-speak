@@ -71,6 +71,12 @@ func TestPracticeSessionHTTPFlowRequiresAuthAndScopesSessionToActor(t *testing.T
 	}
 
 	sessionID := createdEnvelope.Session.ID
+	if resumable := request(http.MethodGet, "/v1/practice-sessions/resumable", token1, ""); resumable.Code != http.StatusOK || !strings.Contains(resumable.Body.String(), sessionID) {
+		t.Fatalf("resumable session = %d, body=%s", resumable.Code, resumable.Body.String())
+	}
+	if noSession := request(http.MethodGet, "/v1/practice-sessions/resumable", token2, ""); noSession.Code != http.StatusNoContent {
+		t.Fatalf("other user's resumable session = %d, body=%s", noSession.Code, noSession.Body.String())
+	}
 	if got := request(http.MethodGet, "/v1/practice-sessions/"+sessionID, token2, ""); got.Code != http.StatusNotFound {
 		t.Fatalf("cross-user detail = %d, body=%s", got.Code, got.Body.String())
 	}
@@ -104,6 +110,9 @@ func TestPracticeSessionHTTPFlowRequiresAuthAndScopesSessionToActor(t *testing.T
 	}
 	if completed := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/complete", token1, ""); completed.Code != http.StatusOK || !strings.Contains(completed.Body.String(), `"COMPLETED"`) {
 		t.Fatalf("completion = %d, body=%s", completed.Code, completed.Body.String())
+	}
+	if resumable := request(http.MethodGet, "/v1/practice-sessions/resumable", token1, ""); resumable.Code != http.StatusNoContent {
+		t.Fatalf("completed session must not resume = %d, body=%s", resumable.Code, resumable.Body.String())
 	}
 	if current := request(http.MethodGet, "/v1/practice-sessions/"+sessionID+"/current-question", token1, ""); current.Code != http.StatusConflict {
 		t.Fatalf("completed current question = %d, want %d", current.Code, http.StatusConflict)

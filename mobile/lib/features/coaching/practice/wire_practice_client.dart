@@ -32,6 +32,14 @@ final class WirePracticeClient implements PracticeClient {
   }
 
   @override
+  Future<PracticeSession?> getResumableSession() async {
+    final response = await _request('GET', '/v1/practice-sessions/resumable');
+    if (response.statusCode == HttpStatus.noContent) return null;
+    if (response.statusCode != HttpStatus.ok) throw _error(response);
+    return _decode(_map(response)['session']);
+  }
+
+  @override
   Future<PracticeSession> getSession(String sessionID) async {
     final response = await _request('GET', '/v1/practice-sessions/${Uri.encodeComponent(sessionID)}');
     if (response.statusCode != HttpStatus.ok) throw _error(response);

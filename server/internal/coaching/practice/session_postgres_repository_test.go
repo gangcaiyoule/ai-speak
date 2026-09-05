@@ -62,6 +62,29 @@ func TestPostgresSessionRepositoryFindScopesByActorAndLoadsQuestionOrder(t *test
 	}
 }
 
+func TestPostgresSessionRepositoryFindsLatestResumableSession(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	sessionID, planID, questionID := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT `+sessionColumns+` FROM practice_sessions WHERE actor_id=$1 AND status IN ($2,$3) ORDER BY updated_at DESC,id DESC LIMIT 1`)).
+		WithArgs("user-1", SessionStatusActive, SessionStatusDraft).
+		WillReturnRows(sqlmock.NewRows(sessionRowColumns()).AddRow(sessionID, "user-1", planID, "scene", 1, SessionStatusActive, now, now, questionID))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT q.id,q.session_id,q.position,q.content FROM practice_questions q JOIN practice_sessions s ON s.id=q.session_id WHERE q.session_id=$1 AND s.actor_id=$2 ORDER BY q.position ASC`)).
+		WithArgs(sessionID, "user-1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "session_id", "position", "content"}).AddRow(questionID, sessionID, 1, "first"))
+	got, err := NewPostgresSessionRepository(db).FindLatestResumableSession(context.Background(), "user-1")
+	if err != nil || got.ID != sessionID || got.CurrentQuestionID == nil || *got.CurrentQuestionID != questionID {
+		t.Fatalf("FindLatestResumableSession() = %#v, %v", got, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPostgresSessionRepositoryRejectsActivationWhenNotDraft(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
