@@ -77,7 +77,8 @@ func TestPracticeSessionHTTPFlowRequiresAuthAndScopesSessionToActor(t *testing.T
 	if got := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/activation", token2, ""); got.Code != http.StatusNotFound {
 		t.Fatalf("cross-user activation = %d, body=%s", got.Code, got.Body.String())
 	}
-	if activated := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/activation", token1, ""); activated.Code != http.StatusOK || !strings.Contains(activated.Body.String(), `"ACTIVE"`) || !strings.Contains(activated.Body.String(), "请介绍你的背景和最近的经历") {
+	activated := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/activation", token1, "")
+	if activated.Code != http.StatusOK || !strings.Contains(activated.Body.String(), `"ACTIVE"`) || !strings.Contains(activated.Body.String(), "请介绍你的背景和最近的经历") {
 		t.Fatalf("activation = %d, body=%s", activated.Code, activated.Body.String())
 	}
 	if current := request(http.MethodGet, "/v1/practice-sessions/"+sessionID+"/current-question", token1, ""); current.Code != http.StatusOK || !strings.Contains(current.Body.String(), "请介绍你的背景和最近的经历") {
@@ -85,6 +86,21 @@ func TestPracticeSessionHTTPFlowRequiresAuthAndScopesSessionToActor(t *testing.T
 	}
 	if repeated := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/activation", token1, ""); repeated.Code != http.StatusConflict {
 		t.Fatalf("repeated activation = %d, want %d", repeated.Code, http.StatusConflict)
+	}
+	var activatedEnvelope struct{ Session practice.Session }
+	if err := json.NewDecoder(activated.Body).Decode(&activatedEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	if activatedEnvelope.Session.CurrentQuestionID == nil {
+		t.Fatal("activated session has no current question id")
+	}
+	answerBody := `{"question_id":"` + *activatedEnvelope.Session.CurrentQuestionID + `","content":"  我的回答  "}`
+	answered := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/text-answers", token1, answerBody)
+	if answered.Code != http.StatusOK || !strings.Contains(answered.Body.String(), `"content":"我的回答"`) || !strings.Contains(answered.Body.String(), `"current_question_id":null`) {
+		t.Fatalf("answer = %d, body=%s", answered.Code, answered.Body.String())
+	}
+	if repeated := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/text-answers", token1, answerBody); repeated.Code != http.StatusConflict || !strings.Contains(repeated.Body.String(), "answer_already_submitted") {
+		t.Fatalf("repeated answer = %d, body=%s", repeated.Code, repeated.Body.String())
 	}
 	if completed := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/complete", token1, ""); completed.Code != http.StatusOK || !strings.Contains(completed.Body.String(), `"COMPLETED"`) {
 		t.Fatalf("completion = %d, body=%s", completed.Code, completed.Body.String())

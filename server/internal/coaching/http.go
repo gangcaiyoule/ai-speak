@@ -55,7 +55,7 @@ func (h *HTTPHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/practice-sessions/{session_id}/current-question", h.getCurrentQuestion)
 	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/activation", h.activateSession)
 	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/activate", h.activateSession)
-	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/text-answers", h.notImplemented)
+	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/text-answers", h.submitTextAnswer)
 	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/complete", h.completeSession)
 	mux.HandleFunc("GET /v1/practice-sessions/{session_id}/evaluation", h.notImplemented)
 	mux.HandleFunc("GET /v1/evaluation-reports/{report_id}", h.notImplemented)
@@ -170,6 +170,28 @@ func (h *HTTPHandler) activateSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"session": session})
 }
 
+func (h *HTTPHandler) submitTextAnswer(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	var in practice.SubmitTextAnswerInput
+	if !decodeCoachingJSON(w, r, &in) {
+		return
+	}
+	turn, err := h.sessions.SubmitTextAnswer(r.Context(), actorID, r.PathValue("session_id"), in)
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	session, err := h.sessions.GetSession(r.Context(), actorID, r.PathValue("session_id"))
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"turn": turn, "session": session})
+}
+
 func (h *HTTPHandler) completeSession(w http.ResponseWriter, r *http.Request) {
 	actorID, ok := h.actorID(w, r)
 	if !ok {
@@ -229,6 +251,14 @@ func (h *HTTPHandler) writeCoachingError(w http.ResponseWriter, err error) {
 		status, code = http.StatusConflict, "invalid_state_transition"
 	case errors.Is(err, practice.ErrNoCurrentQuestion):
 		status, code = http.StatusConflict, "practice_question_not_available"
+	case errors.Is(err, practice.ErrInvalidAnswer):
+		status, code = http.StatusBadRequest, "invalid_answer"
+	case errors.Is(err, practice.ErrQuestionNotCurrent):
+		status, code = http.StatusConflict, "question_not_current"
+	case errors.Is(err, practice.ErrAnswerAlreadySubmitted):
+		status, code = http.StatusConflict, "answer_already_submitted"
+	case errors.Is(err, practice.ErrSessionHasPendingQuestion):
+		status, code = http.StatusConflict, "practice_session_has_pending_questions"
 	}
 	if status == http.StatusUnauthorized {
 		w.Header().Set("WWW-Authenticate", "Bearer")

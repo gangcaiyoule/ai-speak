@@ -150,6 +150,31 @@ paths:
         '409':
           description: Session is not in ACTIVE state
           content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+  /v1/practice-sessions/{session_id}/text-answers:
+    post:
+      security: [{bearerAuth: []}]
+      parameters: [{name: session_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SubmitTextAnswer'}
+      responses:
+        '200':
+          description: Saved answer and updated session
+          content: {application/json: {schema: {$ref: '#/components/schemas/AnswerResponse'}}}
+        '400':
+          description: Empty or invalid answer
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '401':
+          description: Authentication required
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '404':
+          description: Session not found or not owned by the authenticated user
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '409':
+          description: Session inactive, question is not current, or answer was already submitted
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -216,7 +241,7 @@ components:
         content: {type: string}
     PracticeSession:
       type: object
-      required: [id, actor_id, plan_id, scene_id, scene_version, status, created_at, updated_at, questions, current_question]
+      required: [id, actor_id, plan_id, scene_id, scene_version, status, created_at, updated_at, questions, current_question_id, current_question]
       properties:
         id: {type: string, format: uuid}
         actor_id: {type: string}
@@ -229,6 +254,10 @@ components:
         questions:
           type: array
           items: {$ref: '#/components/schemas/PracticeQuestion'}
+        current_question_id:
+          type: string
+          format: uuid
+          nullable: true
         current_question:
           nullable: true
           allOf:
@@ -243,3 +272,26 @@ components:
       required: [question]
       properties:
         question: {$ref: '#/components/schemas/PracticeQuestion'}
+    SubmitTextAnswer:
+      type: object
+      required: [question_id, content]
+      additionalProperties: false
+      properties:
+        question_id: {type: string, format: uuid}
+        content: {type: string, minLength: 1}
+    PracticeTurn:
+      type: object
+      required: [id, session_id, question_id, actor_id, content, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        question_id: {type: string, format: uuid}
+        actor_id: {type: string}
+        content: {type: string}
+        created_at: {type: string, format: date-time}
+    AnswerResponse:
+      type: object
+      required: [turn, session]
+      properties:
+        turn: {$ref: '#/components/schemas/PracticeTurn'}
+        session: {$ref: '#/components/schemas/PracticeSession'}
