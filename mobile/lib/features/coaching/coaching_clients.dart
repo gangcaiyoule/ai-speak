@@ -51,6 +51,8 @@ abstract interface class PracticeClient {
   /// 创建指定场景的练习会话。
   Future<PracticeSession> createSession(String planID);
   Future<PracticeSession> activateSession(String sessionID);
+  /// Returns the most recently updated DRAFT or ACTIVE session, if any.
+  Future<PracticeSession?> getResumableSession();
   /// 读取指定练习会话。
   Future<PracticeSession> getSession(String sessionID);
   /// 向指定练习会话提交文字回答。
