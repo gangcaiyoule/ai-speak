@@ -18,6 +18,9 @@ var (
 	ErrSessionNotActive         = errors.New("practice session is not active")
 	ErrInvalidSessionTransition = errors.New("invalid practice session state transition")
 	ErrNoCurrentQuestion        = errors.New("practice session has no current question")
+	ErrInvalidAnswer            = errors.New("invalid practice answer")
+	ErrQuestionNotFound         = errors.New("practice question not found")
+	ErrQuestionAlreadyAnswered  = errors.New("practice question already answered")
 )
 
 const (
@@ -46,6 +49,22 @@ type Question struct {
 	SessionID string `json:"session_id"`
 	Position  int    `json:"position"`
 	Content   string `json:"content"`
+	Status    string `json:"status"`
+}
+
+// Turn 是用户对当前问题提交的一次文字回答。
+type Turn struct {
+	ID         string    `json:"id"`
+	SessionID  string    `json:"session_id"`
+	QuestionID string    `json:"question_id"`
+	Content    string    `json:"content"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// SubmitAnswerInput 包含文字回答提交所需的数据。
+type SubmitAnswerInput struct {
+	QuestionID string `json:"question_id"`
+	Content    string `json:"content"`
 }
 
 // CreateSessionInput 包含创建练习会话所需的数据。
@@ -59,6 +78,7 @@ type SessionRepository interface {
 	CreateSession(context.Context, Session, []Question) (Session, error)
 	FindSession(context.Context, string, string) (Session, error)
 	ActivateSession(context.Context, string, string, time.Time) (Session, error)
+	SubmitAnswer(context.Context, string, string, SubmitAnswerInput, time.Time) (Turn, Session, error)
 	CompleteSession(context.Context, string, string, time.Time) (Session, error)
 }
 
@@ -68,6 +88,7 @@ type SessionService interface {
 	GetSession(context.Context, string, string) (Session, error)
 	GetCurrentQuestion(context.Context, string, string) (Question, error)
 	ActivateSession(context.Context, string, string) (Session, error)
+	SubmitAnswer(context.Context, string, string, SubmitAnswerInput) (Turn, Session, error)
 	CompleteSession(context.Context, string, string) (Session, error)
 }
 
@@ -132,6 +153,7 @@ func (s *sessionService) CreateSession(ctx context.Context, actorID string, in C
 			SessionID: session.ID,
 			Position:  position + 1,
 			Content:   blueprint,
+			Status:    "PENDING",
 		})
 	}
 	return s.repo.CreateSession(ctx, session, questions)
@@ -173,6 +195,20 @@ func (s *sessionService) ActivateSession(ctx context.Context, actorID, sessionID
 	return withCurrentQuestion(session), nil
 }
 
+func (s *sessionService) SubmitAnswer(ctx context.Context, actorID, sessionID string, in SubmitAnswerInput) (Turn, Session, error) {
+	if strings.TrimSpace(actorID) == "" || strings.TrimSpace(sessionID) == "" || strings.TrimSpace(in.QuestionID) == "" || strings.TrimSpace(in.Content) == "" {
+		return Turn{}, Session{}, ErrInvalidAnswer
+	}
+	if len([]rune(in.Content)) > 4000 {
+		return Turn{}, Session{}, ErrInvalidAnswer
+	}
+	turn, session, err := s.repo.SubmitAnswer(ctx, actorID, sessionID, SubmitAnswerInput{QuestionID: in.QuestionID, Content: strings.TrimSpace(in.Content)}, s.now().UTC())
+	if err != nil {
+		return Turn{}, Session{}, err
+	}
+	return turn, withCurrentQuestion(session), nil
+}
+
 func (s *sessionService) CompleteSession(ctx context.Context, actorID, sessionID string) (Session, error) {
 	if strings.TrimSpace(actorID) == "" || strings.TrimSpace(sessionID) == "" {
 		return Session{}, ErrSessionNotFound
@@ -187,9 +223,14 @@ func (s *sessionService) CompleteSession(ctx context.Context, actorID, sessionID
 func withCurrentQuestion(session Session) Session {
 	session.Questions = append([]Question(nil), session.Questions...)
 	session.CurrentQuestion = nil
-	if session.Status == SessionStatusActive && len(session.Questions) > 0 {
-		question := session.Questions[0]
-		session.CurrentQuestion = &question
+	if session.Status == SessionStatusActive {
+		for _, question := range session.Questions {
+			if question.Status == "PENDING" {
+				current := question
+				session.CurrentQuestion = &current
+				break
+			}
+		}
 	}
 	return session
 }
@@ -239,6 +280,46 @@ func (r *MemorySessionRepository) ActivateSession(ctx context.Context, actorID, 
 	return r.transition(ctx, actorID, sessionID, SessionStatusDraft, SessionStatusActive, now)
 }
 
+func (r *MemorySessionRepository) SubmitAnswer(ctx context.Context, actorID, sessionID string, in SubmitAnswerInput, now time.Time) (Turn, Session, error) {
+	if err := contextError(ctx); err != nil {
+		return Turn{}, Session{}, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	session, ok := r.sessions[sessionID]
+	if !ok || session.ActorID != actorID {
+		return Turn{}, Session{}, ErrSessionNotFound
+	}
+	if session.Status != SessionStatusActive {
+		return Turn{}, Session{}, ErrSessionNotActive
+	}
+	questions := r.questions[sessionID]
+	for index := range questions {
+		question := &questions[index]
+		if question.ID != in.QuestionID {
+			continue
+		}
+		if question.Status == "ANSWERED" {
+			return Turn{}, Session{}, ErrQuestionAlreadyAnswered
+		}
+		for _, candidate := range questions {
+			if candidate.Status == "PENDING" {
+				if candidate.ID != in.QuestionID {
+					return Turn{}, Session{}, ErrQuestionNotFound
+				}
+				break
+			}
+		}
+		question.Status = "ANSWERED"
+		turn := Turn{ID: uuid.NewString(), SessionID: sessionID, QuestionID: in.QuestionID, Content: in.Content, CreatedAt: now}
+		r.questions[sessionID] = questions
+		session.UpdatedAt = now
+		r.sessions[sessionID] = session
+		return turn, withQuestions(session, questions), nil
+	}
+	return Turn{}, Session{}, ErrQuestionNotFound
+}
+
 func (r *MemorySessionRepository) CompleteSession(ctx context.Context, actorID, sessionID string, now time.Time) (Session, error) {
 	return r.transition(ctx, actorID, sessionID, SessionStatusActive, SessionStatusCompleted, now)
 }
@@ -276,6 +357,11 @@ func validateSessionSnapshot(session Session, questions []Question) error {
 
 func withQuestions(session Session, questions []Question) Session {
 	session.Questions = cloneQuestions(questions)
+	for index := range session.Questions {
+		if session.Questions[index].Status == "" {
+			session.Questions[index].Status = "PENDING"
+		}
+	}
 	session.CurrentQuestion = nil
 	return session
 }

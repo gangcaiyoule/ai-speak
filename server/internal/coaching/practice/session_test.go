@@ -89,6 +89,30 @@ func TestSessionServiceRejectsArchivedPlan(t *testing.T) {
 	}
 }
 
+func TestSessionServiceSubmitsOnlyCurrentQuestionAndAdvances(t *testing.T) {
+	service, _, plan := newSessionTestService(t)
+	session, err := service.CreateSession(context.Background(), plan.ActorID, CreateSessionInput{PlanID: plan.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = service.SubmitAnswer(context.Background(), plan.ActorID, session.ID, SubmitAnswerInput{QuestionID: session.Questions[0].ID, Content: "answer"}); !errors.Is(err, ErrSessionNotActive) {
+		t.Fatalf("submit draft error = %v, want ErrSessionNotActive", err)
+	}
+	if _, err = service.ActivateSession(context.Background(), plan.ActorID, session.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = service.SubmitAnswer(context.Background(), plan.ActorID, session.ID, SubmitAnswerInput{QuestionID: session.Questions[1].ID, Content: "answer"}); !errors.Is(err, ErrQuestionNotFound) {
+		t.Fatalf("submit non-current error = %v, want ErrQuestionNotFound", err)
+	}
+	turn, updated, err := service.SubmitAnswer(context.Background(), plan.ActorID, session.ID, SubmitAnswerInput{QuestionID: session.Questions[0].ID, Content: "  clear answer  "})
+	if err != nil || turn.Content != "clear answer" || updated.CurrentQuestion == nil || updated.CurrentQuestion.Position != 2 {
+		t.Fatalf("submit current = %#v, %#v, %v", turn, updated, err)
+	}
+	if _, _, err = service.SubmitAnswer(context.Background(), plan.ActorID, session.ID, SubmitAnswerInput{QuestionID: session.Questions[0].ID, Content: "again"}); !errors.Is(err, ErrQuestionAlreadyAnswered) {
+		t.Fatalf("repeat answer error = %v, want ErrQuestionAlreadyAnswered", err)
+	}
+}
+
 type sessionTestCatalog struct {
 	detail scene.Scene
 }
