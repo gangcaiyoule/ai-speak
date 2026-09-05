@@ -23,6 +23,9 @@ UI（字幕、波形）不在本目录范围内，只预留数据出口。
 `bindings.dart`（原生 FFI ↔ web 桩）与模块平台工厂
 `src/mic_source_factory.dart`（[NativeMicSource] ↔ [WebMicSource]）。
 web 侧的 Float32→I16 转换在 `src/pcm_convert.dart`（纯函数可单测）。
+App 装配层注册了调试路由 `/voice-debug`（`voice_debug_page.dart`）：
+经工厂取当前平台 [MicSource]，web 打包后在浏览器授权麦克风即可实测
+宿主系统麦克风（Windows 上为 Chrome/Edge 授权的系统默认麦克风）。
 
 ## 2. 共享环形缓冲（核心抽象，先行实现）
 
@@ -122,12 +125,31 @@ partial/final 区分、kind+retryable 失败模型），但只定义抽象，不
   真实云服务接入另行推进
 - R7 ◐ AudioSink 播放路径已落地（`NativeAudioSink` + Oboe 输出流 + RemoteIO 渲染回调 + `playback_queue` 欠载状态机）；真机实测待 R8
 - R8 端到端联调：弱网（丢包/延迟注入）下验证传输方案选型与缓冲预算
+- web ✅ 打包支持落地：`mobile/web` 脚手架启用，`flutter build web` 编译图
+  含采集链路 web 分支（getUserMedia + AudioWorklet）；`/voice-debug` 路由
+  供浏览器实测；App 装配层 HTTP 客户端已改为平台无关实现（package:http）
 
 ## 7. 验证口径
 
 本目录改动必须跑的：`flutter analyze`、`flutter test`（R1/R3/R6 阶段），
 C 层用各端单元测试入口回归；真机项（R4/R5/R7/R8）以实测延迟/丢包数字为准。
 本机当前没有 Flutter SDK 时，验证由有环境的机器执行，不在记录里写没跑过的结果。
+
+### 7.1 验证记录
+
+- 2026-09-05 web 打包支持，环境：GitHub Codespace
+  `musical-invention-p49pw6j5g5jcrwvp`（`/workspaces/ai-speak`，Flutter
+  3.47.2 stable / Dart 3.13.2）：
+  - `flutter analyze`：0 error / 0 warning（余 5 条 info 为 coaching
+    preparation 既有提示，与本模块无关）。
+  - `flutter test`（VM）：72 通过，2 失败（`coaching/preparation` 既有
+    状态机用例，纯假实现、不涉及本模块与本次改动路径，另立任务处理）。
+  - `flutter build web`：通过；web 编译图覆盖 `mic_source_factory` web
+    分支、`WebMicSource`、`pcm_convert` 与插件绑定层 web 桩全链路。
+  - 浏览器内 getUserMedia 实测（Windows 宿主麦克风）：待人工执行——
+    `flutter run -d web-server` 后经 Codespace 端口转发在 Windows 浏览器
+    打开 `/voice-debug` 授权麦克风；浏览器运行时用例（`--platform
+    chrome`）因容器无浏览器暂未跑。
 
 ## 8. 编码约定
 
