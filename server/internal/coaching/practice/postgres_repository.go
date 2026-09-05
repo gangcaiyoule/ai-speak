@@ -182,6 +182,22 @@ func (r *PostgresSessionRepository) SubmitAnswer(ctx context.Context, actorID, s
 	if status != SessionStatusActive {
 		return Turn{}, Session{}, ErrSessionNotActive
 	}
+	var questionExists bool
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM practice_questions WHERE id=$1 AND session_id=$2)`, in.QuestionID, sessionID).Scan(&questionExists)
+	if err != nil {
+		return Turn{}, Session{}, fmt.Errorf("verify practice question: %w", err)
+	}
+	if !questionExists {
+		return Turn{}, Session{}, ErrQuestionNotFound
+	}
+	var answered bool
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM practice_turns WHERE session_id=$1 AND question_id=$2)`, sessionID, in.QuestionID).Scan(&answered)
+	if err != nil {
+		return Turn{}, Session{}, fmt.Errorf("check duplicate practice answer: %w", err)
+	}
+	if answered {
+		return Turn{}, Session{}, ErrQuestionAlreadyAnswered
+	}
 	var currentID string
 	err = tx.QueryRowContext(ctx, `SELECT q.id FROM practice_questions q WHERE q.session_id=$1 AND NOT EXISTS (SELECT 1 FROM practice_turns t WHERE t.question_id=q.id) ORDER BY q.position LIMIT 1`, sessionID).Scan(&currentID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -217,7 +233,49 @@ func (r *PostgresSessionRepository) SubmitAnswer(ctx context.Context, actorID, s
 }
 
 func (r *PostgresSessionRepository) CompleteSession(ctx context.Context, actorID, sessionID string, now time.Time) (Session, error) {
-	return r.transitionSession(ctx, actorID, sessionID, SessionStatusActive, SessionStatusCompleted, now)
+	if err := contextError(ctx); err != nil {
+		return Session{}, err
+	}
+	if r == nil || r.db == nil {
+		return Session{}, ErrSessionNotFound
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Session{}, fmt.Errorf("begin practice completion transaction: %w", err)
+	}
+	defer tx.Rollback()
+	var status string
+	err = tx.QueryRowContext(ctx, `SELECT status FROM practice_sessions WHERE id=$1 AND actor_id=$2 FOR UPDATE`, sessionID, actorID).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Session{}, ErrSessionNotFound
+	}
+	if err != nil {
+		return Session{}, fmt.Errorf("lock practice session: %w", err)
+	}
+	if status != SessionStatusActive {
+		return Session{}, ErrInvalidSessionTransition
+	}
+	var hasPending bool
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM practice_questions q WHERE q.session_id=$1 AND NOT EXISTS (SELECT 1 FROM practice_turns t WHERE t.session_id=$1 AND t.question_id=q.id))`, sessionID).Scan(&hasPending)
+	if err != nil {
+		return Session{}, fmt.Errorf("check pending practice questions: %w", err)
+	}
+	if hasPending {
+		return Session{}, ErrSessionHasPendingQuestions
+	}
+	query := `UPDATE practice_sessions SET status=$3,updated_at=$4 WHERE id=$1 AND actor_id=$2 AND status=$5 RETURNING ` + sessionColumns
+	session, err := scanPostgresSession(tx.QueryRowContext(ctx, query, sessionID, actorID, SessionStatusCompleted, now, SessionStatusActive))
+	if err != nil {
+		return Session{}, fmt.Errorf("complete practice session: %w", err)
+	}
+	if err = tx.Commit(); err != nil {
+		return Session{}, fmt.Errorf("commit practice completion: %w", err)
+	}
+	questions, err := listPostgresQuestions(ctx, r.db, actorID, sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	return withQuestions(session, questions), nil
 }
 
 func (r *PostgresSessionRepository) transitionSession(ctx context.Context, actorID, sessionID, from, to string, now time.Time) (Session, error) {

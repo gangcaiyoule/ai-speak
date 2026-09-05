@@ -170,10 +170,10 @@ paths:
           description: Authentication required
           content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
         '404':
-          description: Session not found or question is not part of the session
+          description: Session not found
           content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
         '409':
-          description: Session is not active or question is not current/already answered
+          description: Session is not active, has no current question, or question is not current/already answered
           content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
 components:
   securitySchemes:

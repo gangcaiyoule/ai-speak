@@ -252,6 +252,8 @@ func (h *HTTPHandler) writeCoachingError(w http.ResponseWriter, err error) {
 		status, code = http.StatusConflict, "practice_question_not_current"
 	case errors.Is(err, practice.ErrQuestionAlreadyAnswered):
 		status, code = http.StatusConflict, "practice_question_already_answered"
+	case errors.Is(err, practice.ErrSessionHasPendingQuestions):
+		status, code = http.StatusConflict, "practice_session_has_pending_questions"
 	}
 	if status == http.StatusUnauthorized {
 		w.Header().Set("WWW-Authenticate", "Bearer")

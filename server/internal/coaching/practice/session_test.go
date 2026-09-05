@@ -64,9 +64,17 @@ func TestSessionServiceEnforcesDraftActiveCompletedLifecycleAndCurrentQuestion(t
 		t.Fatalf("activate active error = %v, want ErrInvalidSessionTransition", err)
 	}
 
+	if _, err := service.CompleteSession(context.Background(), plan.ActorID, session.ID); !errors.Is(err, ErrSessionHasPendingQuestions) {
+		t.Fatalf("complete active session with pending questions error = %v, want ErrSessionHasPendingQuestions", err)
+	}
+	for _, question := range active.Questions {
+		if _, _, err := service.SubmitAnswer(context.Background(), plan.ActorID, session.ID, SubmitAnswerInput{QuestionID: question.ID, Content: "answer"}); err != nil {
+			t.Fatalf("submit answer %q: %v", question.ID, err)
+		}
+	}
 	completed, err := service.CompleteSession(context.Background(), plan.ActorID, session.ID)
 	if err != nil {
-		t.Fatalf("CompleteSession() error = %v", err)
+		t.Fatalf("CompleteSession() after all answers error = %v", err)
 	}
 	if completed.Status != SessionStatusCompleted || completed.CurrentQuestion != nil {
 		t.Fatalf("completed session = %#v", completed)

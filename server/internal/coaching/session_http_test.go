@@ -92,8 +92,17 @@ func TestPracticeSessionHTTPFlowRequiresAuthAndScopesSessionToActor(t *testing.T
 		t.Fatalf("repeated activation = %d, want %d", repeated.Code, http.StatusConflict)
 	}
 	answer := `{"question_id":"` + activeEnvelope.Session.CurrentQuestion.ID + `","content":"My recent experience is building this product."}`
+	if crossUser := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/text-answers", token2, answer); crossUser.Code != http.StatusNotFound {
+		t.Fatalf("cross-user text answer = %d, body=%s", crossUser.Code, crossUser.Body.String())
+	}
+	if empty := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/text-answers", token1, `{"question_id":"`+activeEnvelope.Session.CurrentQuestion.ID+`","content":"  "}`); empty.Code != http.StatusBadRequest {
+		t.Fatalf("empty text answer = %d, body=%s", empty.Code, empty.Body.String())
+	}
 	if submitted := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/text-answers", token1, answer); submitted.Code != http.StatusOK || !strings.Contains(submitted.Body.String(), `"turn"`) {
 		t.Fatalf("text answer = %d, body=%s", submitted.Code, submitted.Body.String())
+	}
+	if repeatedAnswer := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/text-answers", token1, answer); repeatedAnswer.Code != http.StatusConflict {
+		t.Fatalf("repeated text answer = %d, body=%s", repeatedAnswer.Code, repeatedAnswer.Body.String())
 	}
 	if completed := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/complete", token1, ""); completed.Code != http.StatusOK || !strings.Contains(completed.Body.String(), `"COMPLETED"`) {
 		t.Fatalf("completion = %d, body=%s", completed.Code, completed.Body.String())

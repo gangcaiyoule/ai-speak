@@ -13,14 +13,15 @@ import (
 )
 
 var (
-	ErrInvalidSession           = errors.New("invalid practice session")
-	ErrSessionNotFound          = errors.New("practice session not found")
-	ErrSessionNotActive         = errors.New("practice session is not active")
-	ErrInvalidSessionTransition = errors.New("invalid practice session state transition")
-	ErrNoCurrentQuestion        = errors.New("practice session has no current question")
-	ErrInvalidAnswer            = errors.New("invalid practice answer")
-	ErrQuestionNotFound         = errors.New("practice question not found")
-	ErrQuestionAlreadyAnswered  = errors.New("practice question already answered")
+	ErrInvalidSession             = errors.New("invalid practice session")
+	ErrSessionNotFound            = errors.New("practice session not found")
+	ErrSessionNotActive           = errors.New("practice session is not active")
+	ErrInvalidSessionTransition   = errors.New("invalid practice session state transition")
+	ErrNoCurrentQuestion          = errors.New("practice session has no current question")
+	ErrInvalidAnswer              = errors.New("invalid practice answer")
+	ErrQuestionNotFound           = errors.New("practice question not found")
+	ErrQuestionAlreadyAnswered    = errors.New("practice question already answered")
+	ErrSessionHasPendingQuestions = errors.New("practice session has pending questions")
 )
 
 const (
@@ -321,7 +322,27 @@ func (r *MemorySessionRepository) SubmitAnswer(ctx context.Context, actorID, ses
 }
 
 func (r *MemorySessionRepository) CompleteSession(ctx context.Context, actorID, sessionID string, now time.Time) (Session, error) {
-	return r.transition(ctx, actorID, sessionID, SessionStatusActive, SessionStatusCompleted, now)
+	if err := contextError(ctx); err != nil {
+		return Session{}, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	session, ok := r.sessions[sessionID]
+	if !ok || session.ActorID != actorID {
+		return Session{}, ErrSessionNotFound
+	}
+	if session.Status != SessionStatusActive {
+		return Session{}, ErrInvalidSessionTransition
+	}
+	for _, question := range r.questions[sessionID] {
+		if question.Status != "ANSWERED" {
+			return Session{}, ErrSessionHasPendingQuestions
+		}
+	}
+	session.Status = SessionStatusCompleted
+	session.UpdatedAt = now
+	r.sessions[sessionID] = session
+	return withQuestions(session, r.questions[sessionID]), nil
 }
 
 func (r *MemorySessionRepository) transition(ctx context.Context, actorID, sessionID, from, to string, now time.Time) (Session, error) {

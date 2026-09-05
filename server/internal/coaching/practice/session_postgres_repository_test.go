@@ -123,10 +123,18 @@ func TestPostgresSessionRepositoryTransitionsActiveSessionToCompleted(t *testing
 	planID := uuid.NewString()
 	questionID := uuid.NewString()
 	now := time.Now().UTC().Truncate(time.Microsecond)
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT status FROM practice_sessions WHERE id=$1 AND actor_id=$2 FOR UPDATE`)).
+		WithArgs(sessionID, "user-1").
+		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow(SessionStatusActive))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS (SELECT 1 FROM practice_questions q WHERE q.session_id=$1 AND NOT EXISTS (SELECT 1 FROM practice_turns t WHERE t.session_id=$1 AND t.question_id=q.id))`)).
+		WithArgs(sessionID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
 	mock.ExpectQuery(regexp.QuoteMeta(`UPDATE practice_sessions SET status=$3,updated_at=$4 WHERE id=$1 AND actor_id=$2 AND status=$5 RETURNING `+sessionColumns)).
 		WithArgs(sessionID, "user-1", SessionStatusCompleted, sqlmock.AnyArg(), SessionStatusActive).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "actor_id", "plan_id", "scene_id", "scene_version", "status", "created_at", "updated_at"}).
 			AddRow(sessionID, "user-1", planID, "scene", 1, SessionStatusCompleted, now, now.Add(time.Minute)))
+	mock.ExpectCommit()
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT q.id,q.session_id,q.position,q.content FROM practice_questions q JOIN practice_sessions s ON s.id=q.session_id WHERE q.session_id=$1 AND s.actor_id=$2 ORDER BY q.position ASC`)).
 		WithArgs(sessionID, "user-1").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "session_id", "position", "content"}).AddRow(questionID, sessionID, 1, "first"))
@@ -137,6 +145,119 @@ func TestPostgresSessionRepositoryTransitionsActiveSessionToCompleted(t *testing
 	}
 	if got.Status != SessionStatusCompleted || len(got.Questions) != 1 || got.Questions[0].ID != questionID {
 		t.Fatalf("CompleteSession() = %#v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPostgresSessionRepositoryRejectsDuplicateAnswer(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	sessionID := uuid.NewString()
+	questionID := uuid.NewString()
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT status FROM practice_sessions WHERE id=$1 AND actor_id=$2 FOR UPDATE`)).
+		WithArgs(sessionID, "user-1").
+		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow(SessionStatusActive))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS (SELECT 1 FROM practice_questions WHERE id=$1 AND session_id=$2)`)).
+		WithArgs(questionID, sessionID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS (SELECT 1 FROM practice_turns WHERE session_id=$1 AND question_id=$2)`)).
+		WithArgs(sessionID, questionID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectRollback()
+
+	_, _, err = NewPostgresSessionRepository(db).SubmitAnswer(context.Background(), "user-1", sessionID, SubmitAnswerInput{QuestionID: questionID, Content: "again"}, time.Now().UTC())
+	if !errors.Is(err, ErrQuestionAlreadyAnswered) {
+		t.Fatalf("SubmitAnswer() error = %v, want ErrQuestionAlreadyAnswered", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPostgresSessionRepositorySubmitsCurrentAnswerAndAdvances(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	sessionID := uuid.NewString()
+	firstQuestionID := uuid.NewString()
+	secondQuestionID := uuid.NewString()
+	planID := uuid.NewString()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT status FROM practice_sessions WHERE id=$1 AND actor_id=$2 FOR UPDATE`)).
+		WithArgs(sessionID, "user-1").
+		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow(SessionStatusActive))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS (SELECT 1 FROM practice_questions WHERE id=$1 AND session_id=$2)`)).
+		WithArgs(firstQuestionID, sessionID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS (SELECT 1 FROM practice_turns WHERE session_id=$1 AND question_id=$2)`)).
+		WithArgs(sessionID, firstQuestionID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT q.id FROM practice_questions q WHERE q.session_id=$1 AND NOT EXISTS (SELECT 1 FROM practice_turns t WHERE t.question_id=q.id) ORDER BY q.position LIMIT 1`)).
+		WithArgs(sessionID).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(firstQuestionID))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO practice_turns (id,session_id,question_id,content,created_at) VALUES ($1,$2,$3,$4,$5)`)).
+		WithArgs(sqlmock.AnyArg(), sessionID, firstQuestionID, "answer", now).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT `+sessionColumns+` FROM practice_sessions WHERE id=$1 AND actor_id=$2`)).
+		WithArgs(sessionID, "user-1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "actor_id", "plan_id", "scene_id", "scene_version", "status", "created_at", "updated_at"}).
+			AddRow(sessionID, "user-1", planID, "scene", 1, SessionStatusActive, now, now))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT q.id,q.session_id,q.position,q.content FROM practice_questions q JOIN practice_sessions s ON s.id=q.session_id WHERE q.session_id=$1 AND s.actor_id=$2 ORDER BY q.position ASC`)).
+		WithArgs(sessionID, "user-1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "session_id", "position", "content"}).
+			AddRow(firstQuestionID, sessionID, 1, "first").
+			AddRow(secondQuestionID, sessionID, 2, "second"))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS (SELECT 1 FROM practice_turns WHERE question_id=$1)`)).
+		WithArgs(firstQuestionID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS (SELECT 1 FROM practice_turns WHERE question_id=$1)`)).
+		WithArgs(secondQuestionID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+	turn, session, err := NewPostgresSessionRepository(db).SubmitAnswer(context.Background(), "user-1", sessionID, SubmitAnswerInput{QuestionID: firstQuestionID, Content: "answer"}, now)
+	if err != nil {
+		t.Fatalf("SubmitAnswer() error = %v", err)
+	}
+	if turn.QuestionID != firstQuestionID || turn.Content != "answer" || session.CurrentQuestion == nil || session.CurrentQuestion.ID != secondQuestionID {
+		t.Fatalf("SubmitAnswer() = %#v, %#v", turn, session)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPostgresSessionRepositoryRejectsCompletionWithPendingQuestions(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	sessionID := uuid.NewString()
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT status FROM practice_sessions WHERE id=$1 AND actor_id=$2 FOR UPDATE`)).
+		WithArgs(sessionID, "user-1").
+		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow(SessionStatusActive))
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS (SELECT 1 FROM practice_questions q WHERE q.session_id=$1 AND NOT EXISTS (SELECT 1 FROM practice_turns t WHERE t.session_id=$1 AND t.question_id=q.id))`)).
+		WithArgs(sessionID).
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectRollback()
+
+	_, err = NewPostgresSessionRepository(db).CompleteSession(context.Background(), "user-1", sessionID, time.Now().UTC())
+	if !errors.Is(err, ErrSessionHasPendingQuestions) {
+		t.Fatalf("CompleteSession() error = %v, want ErrSessionHasPendingQuestions", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
