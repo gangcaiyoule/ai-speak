@@ -331,86 +331,6 @@
     },
   ];
 
-  const socialPosts = [
-    {
-      id: "start-speaking",
-      platform: "小红书",
-      type: "图文",
-      title: "英语口语到底怎么开始？",
-      excerpt: "别再把“开始练口语”变成另一份学习规划。告诉 SpeakUp 你下一场要说什么，然后直接开始。",
-      href: "https://xhslink.cn/o/9cueBSeKN3F",
-      image: "/assets/speakup/social-wall/01-start-speaking.webp",
-      width: 1080,
-      height: 1440,
-    },
-    {
-      id: "foreign-client",
-      platform: "小红书",
-      type: "图文",
-      title: "明天要接待外国客户，现在抱佛脚来得及吗",
-      excerpt: "临时准备也可以很具体：客户是谁、你要谈什么、最怕被追问什么，下一次不必重新解释。",
-      href: "https://xhslink.cn/o/1kazi192sev",
-      image: "/assets/speakup/social-wall/02-foreign-client.webp",
-      width: 1080,
-      height: 1440,
-    },
-    {
-      id: "ai-filter",
-      platform: "抖音",
-      type: "图文",
-      title: "AI 把我的英语 P 成了照骗",
-      excerpt: "邮件里像 C2，视频会议里却只剩 Yes。写作可以润色，真实开口只能提前练过。",
-      href: "https://v.douyin.com/HxcnSuHbB7Y/",
-      image: "/assets/speakup/social-wall/03-ai-filter.webp",
-      width: 1086,
-      height: 1448,
-    },
-    {
-      id: "product-film",
-      platform: "小红书",
-      type: "视频",
-      title: "0 基础剪辑，我居然做出了自己的产品宣传片",
-      excerpt: "从产品画面到真实使用场景：在真正开口之前，先把重要的一次练习拍给自己看。",
-      href: "https://xhslink.cn/o/1J7y3NvyT6Q",
-      image: "/assets/speakup/social-wall/04-product-film.webp",
-      width: 1441,
-      height: 1079,
-    },
-    {
-      id: "speakup-skill",
-      platform: "小红书",
-      type: "视频",
-      title: "什么 skill 这么厉害",
-      excerpt: "一句目标，变成一次可以完成的训练：场景、角色、轮次和反馈都被组织清楚。",
-      href: "https://xhslink.cn/o/6t0JXRjBUG9",
-      image: "/assets/speakup/social-wall/05-speakup-skill.webp",
-      width: 1441,
-      height: 1080,
-    },
-    {
-      id: "first-word",
-      platform: "小红书",
-      type: "视频",
-      title: "原来他也在等你先开口",
-      excerpt: "很多沟通不是没有机会，只差第一句话。先在没有压力的地方，把它真正说出来。",
-      href: "https://xhslink.cn/o/76DNPbzgwe5",
-      image: "/assets/speakup/social-wall/06-first-word.webp",
-      width: 1080,
-      height: 1441,
-    },
-    {
-      id: "ielts-speaking",
-      platform: "小红书",
-      type: "图文",
-      title: "雅思口语开口就卡？",
-      excerpt: "不再背同一份模板：用你的经历生成回答，跟 AI 考官连着练，再看清每一句该怎么改。",
-      href: "https://xhslink.cn/o/9r6ssNYgiNa",
-      image: "/assets/speakup/social-wall/07-ielts-speaking.webp",
-      width: 1080,
-      height: 1350,
-    },
-  ];
-
   // Keys below are source DOM section IDs; `slug` is the public SpeakUp name.
   const chaptersBySourceId = {
     sidekick: {
@@ -2371,6 +2291,8 @@
       .forEach((button) => button.remove());
   }
 
+  /* Removed FIELD NOTES social wall. */
+  /*
   function buildSocialWall() {
     const wall = document.createElement("section");
     wall.id = "speakup-social-wall";
@@ -2551,6 +2473,8 @@
     }
   }
 
+  */
+
   function setSpeakingStruggleOpen(tag, isOpen, isPinned = false) {
     tag.classList.toggle("is-speakup-open", isOpen);
     if (isPinned) tag.dataset.speakupPinned = "true";
@@ -2639,8 +2563,7 @@
     const contentGrid = skills?.parentElement;
     if (!section || !skills || !contentGrid || !section.contains(contentGrid)) return;
 
-    section.classList.add("speakup-social-stories-section");
-    setText(section.querySelector(":scope > div > h3"), "Stories, spoken out loud");
+    section.classList.remove("speakup-social-stories-section");
 
     const introTitle = skills.querySelector("#card-heading-sidekick-skills");
     const introRoot = introTitle?.parentElement;
@@ -2651,15 +2574,7 @@
     );
 
     const introCta = introRoot?.querySelector(':scope > a[data-component-name="cta-link"]');
-    if (introCta) {
-      introCta.setAttribute("href", "#speakup-social-wall");
-      introCta.removeAttribute("target");
-      introCta.removeAttribute("rel");
-      introCta.setAttribute("aria-label", "前往 SpeakUp 真实开口故事");
-      setText(introCta.querySelector(":scope > span"), "看看真实的开口困扰");
-      const arrow = introCta.querySelector("svg");
-      if (arrow) arrow.setAttribute("aria-label", "前往内容墙");
-    }
+    if (introCta) introCta.remove();
 
     const tags = skills.querySelectorAll('#top-skills-card-container li[data-skill-tag="true"]');
     tags.forEach((tag, index) => {
@@ -2674,26 +2589,7 @@
 
     skills.querySelectorAll(":scope > a[download]").forEach((link) => link.remove());
 
-    let wall = contentGrid.querySelector(
-      ':scope > #speakup-social-wall[data-speakup-social-wall="true"]',
-    );
-    if (wall && wall.dataset.speakupWallVersion !== "1") {
-      wall.remove();
-      wall = null;
-    }
-    if (!wall) {
-      wall = buildSocialWall();
-      skills.after(wall);
-    } else if (wall.previousElementSibling !== skills) {
-      skills.after(wall);
-    }
-
-    [...contentGrid.children].forEach((child) => {
-      if (child !== skills && child !== wall) child.remove();
-    });
-    bindSocialWallReveal(wall);
-    bindSocialWallMasonry(wall);
-    scheduleSocialWallMasonry();
+    contentGrid.querySelectorAll(':scope > #speakup-social-wall[data-speakup-social-wall="true"]').forEach((wall) => wall.remove());
   }
 
   function updateHeroOpacity() {
