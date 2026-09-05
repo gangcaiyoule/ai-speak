@@ -77,14 +77,23 @@ func TestPracticeSessionHTTPFlowRequiresAuthAndScopesSessionToActor(t *testing.T
 	if got := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/activation", token2, ""); got.Code != http.StatusNotFound {
 		t.Fatalf("cross-user activation = %d, body=%s", got.Code, got.Body.String())
 	}
-	if activated := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/activation", token1, ""); activated.Code != http.StatusOK || !strings.Contains(activated.Body.String(), `"ACTIVE"`) || !strings.Contains(activated.Body.String(), "请介绍你的背景和最近的经历") {
+	activated := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/activation", token1, "")
+	if activated.Code != http.StatusOK || !strings.Contains(activated.Body.String(), `"ACTIVE"`) || !strings.Contains(activated.Body.String(), "请介绍你的背景和最近的经历") {
 		t.Fatalf("activation = %d, body=%s", activated.Code, activated.Body.String())
+	}
+	var activeEnvelope struct{ Session practice.Session }
+	if err := json.NewDecoder(activated.Body).Decode(&activeEnvelope); err != nil {
+		t.Fatal(err)
 	}
 	if current := request(http.MethodGet, "/v1/practice-sessions/"+sessionID+"/current-question", token1, ""); current.Code != http.StatusOK || !strings.Contains(current.Body.String(), "请介绍你的背景和最近的经历") {
 		t.Fatalf("current question = %d, body=%s", current.Code, current.Body.String())
 	}
 	if repeated := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/activation", token1, ""); repeated.Code != http.StatusConflict {
 		t.Fatalf("repeated activation = %d, want %d", repeated.Code, http.StatusConflict)
+	}
+	answer := `{"question_id":"` + activeEnvelope.Session.CurrentQuestion.ID + `","content":"My recent experience is building this product."}`
+	if submitted := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/text-answers", token1, answer); submitted.Code != http.StatusOK || !strings.Contains(submitted.Body.String(), `"turn"`) {
+		t.Fatalf("text answer = %d, body=%s", submitted.Code, submitted.Body.String())
 	}
 	if completed := request(http.MethodPost, "/v1/practice-sessions/"+sessionID+"/complete", token1, ""); completed.Code != http.StatusOK || !strings.Contains(completed.Body.String(), `"COMPLETED"`) {
 		t.Fatalf("completion = %d, body=%s", completed.Code, completed.Body.String())

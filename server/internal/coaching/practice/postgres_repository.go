@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type PostgresPlanRepository struct{ db *sql.DB }
@@ -155,6 +157,63 @@ func (r *PostgresSessionRepository) FindSession(ctx context.Context, actorID, se
 
 func (r *PostgresSessionRepository) ActivateSession(ctx context.Context, actorID, sessionID string, now time.Time) (Session, error) {
 	return r.transitionSession(ctx, actorID, sessionID, SessionStatusDraft, SessionStatusActive, now)
+}
+
+func (r *PostgresSessionRepository) SubmitAnswer(ctx context.Context, actorID, sessionID string, in SubmitAnswerInput, now time.Time) (Turn, Session, error) {
+	if err := contextError(ctx); err != nil {
+		return Turn{}, Session{}, err
+	}
+	if r == nil || r.db == nil {
+		return Turn{}, Session{}, ErrSessionNotFound
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Turn{}, Session{}, fmt.Errorf("begin practice answer transaction: %w", err)
+	}
+	defer tx.Rollback()
+	var status string
+	err = tx.QueryRowContext(ctx, `SELECT status FROM practice_sessions WHERE id=$1 AND actor_id=$2 FOR UPDATE`, sessionID, actorID).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Turn{}, Session{}, ErrSessionNotFound
+	}
+	if err != nil {
+		return Turn{}, Session{}, fmt.Errorf("lock practice session: %w", err)
+	}
+	if status != SessionStatusActive {
+		return Turn{}, Session{}, ErrSessionNotActive
+	}
+	var currentID string
+	err = tx.QueryRowContext(ctx, `SELECT q.id FROM practice_questions q WHERE q.session_id=$1 AND NOT EXISTS (SELECT 1 FROM practice_turns t WHERE t.question_id=q.id) ORDER BY q.position LIMIT 1`, sessionID).Scan(&currentID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Turn{}, Session{}, ErrNoCurrentQuestion
+	}
+	if err != nil {
+		return Turn{}, Session{}, fmt.Errorf("find current practice question: %w", err)
+	}
+	if currentID != in.QuestionID {
+		return Turn{}, Session{}, ErrQuestionNotFound
+	}
+	turn := Turn{ID: uuid.NewString(), SessionID: sessionID, QuestionID: in.QuestionID, Content: in.Content, CreatedAt: now}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO practice_turns (id,session_id,question_id,content,created_at) VALUES ($1,$2,$3,$4,$5)`, turn.ID, turn.SessionID, turn.QuestionID, turn.Content, turn.CreatedAt); err != nil {
+		return Turn{}, Session{}, fmt.Errorf("insert practice answer: %w", err)
+	}
+	if err = tx.Commit(); err != nil {
+		return Turn{}, Session{}, fmt.Errorf("commit practice answer: %w", err)
+	}
+	session, err := r.FindSession(ctx, actorID, sessionID)
+	if err != nil {
+		return Turn{}, Session{}, err
+	}
+	for index := range session.Questions {
+		var answered bool
+		if err := r.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM practice_turns WHERE question_id=$1)`, session.Questions[index].ID).Scan(&answered); err != nil {
+			return Turn{}, Session{}, fmt.Errorf("read practice answer state: %w", err)
+		}
+		if answered {
+			session.Questions[index].Status = "ANSWERED"
+		}
+	}
+	return turn, withCurrentQuestion(session), nil
 }
 
 func (r *PostgresSessionRepository) CompleteSession(ctx context.Context, actorID, sessionID string, now time.Time) (Session, error) {
