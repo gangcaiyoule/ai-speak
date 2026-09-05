@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_secure_storage: ^9.2.2
+  http: ^1.2.2
   voice_input:
     path: plugins/voice_input
   web: ^1.1.1

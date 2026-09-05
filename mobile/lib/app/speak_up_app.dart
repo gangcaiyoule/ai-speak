@@ -4,6 +4,7 @@ import '../features/coaching/preparation/preparation.dart';
 import '../features/coaching/preparation/preparation_controller.dart';
 import '../features/coaching/practice_plan/practice_plan_client.dart';
 import '../features/coaching/scene/scene_client.dart';
+import '../features/voice_stream/voice_debug_page.dart';
 import '../identity/auth_gate.dart';
 import '../identity/identity_client.dart';
 import 'app_routes.dart';
@@ -33,5 +34,8 @@ class _SpeakUpAppState extends State<SpeakUpApp> {
         title: 'SpeakUp',
         theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
         home: AuthGate(identityClient: widget.identityClient, authenticatedBuilder: (_) => PreparationPage(controller: controller)),
+        routes: {
+          AppRoutes.voiceDebug: (_) => const VoiceDebugPage(),
+        },
       );
 }
