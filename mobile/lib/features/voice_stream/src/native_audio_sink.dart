@@ -20,7 +20,8 @@ class NativeAudioSink implements AudioSink {
   ///
   /// @param format 播放格式；首次 write 时作为 vo_start 的请求采样率
   ///        （实际以协商后格式为准，见接口文档 8.1）。
-  /// @param bindings 原生绑定；缺省 FFI 真实实现，测试注入假绑定。
+  /// @param bindings 原生绑定；缺省经绑定层平台工厂创建（原生 FFI 真实
+  ///        实现 / web 桩），测试注入假绑定。
   /// @param capacityMs 播放缓冲容量按毫秒预算（默认 1000ms = 16kHz 下 32KiB）。
   /// @param primingMs 预缓冲阈值；避免启动期连续欠载，负值取原生默认。
   NativeAudioSink({
@@ -32,7 +33,7 @@ class NativeAudioSink implements AudioSink {
     VoiceOutputBindings? bindings,
     this.capacityMs = 1000,
     this.primingMs = 40,
-  }) : _bindings = bindings ?? FfiVoiceOutputBindings();
+  }) : _bindings = bindings ?? createDefaultOutputBindings();
 
   /// @brief 播放格式（请求值非保证值）。
   final AudioFormat format;
