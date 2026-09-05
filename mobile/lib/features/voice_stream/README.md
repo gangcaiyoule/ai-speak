@@ -129,6 +129,25 @@ partial/final 区分、kind+retryable 失败模型），但只定义抽象，不
   含采集链路 web 分支（getUserMedia + AudioWorklet）；`/voice-debug` 路由
   供浏览器实测；App 装配层 HTTP 客户端已改为平台无关实现（package:http）
 
+### 6.1 与三段式语音链路（其他成员实现）的关系
+
+其他成员的语音功能走三段式：整段录音 → speech2text → 大模型 → text2speech
+→ 整段播放，全程以文本/音频文件为载体，不产生流式音频。取舍如下：
+
+- 三段式的代价：录音、STT、LLM、TTS 四段串行，首音延迟是各段之和；
+  播放中无法打断重说；也没有弱网丢帧语义（整段上传成败二元）。
+  在这个形态里，Oboe 流式采集与 playback_queue 确实用不上——任意录音
+  插件加媒体播放器即可完成，本模块对该形态是超配。
+- 本模块的定位：瞄准流式升级路径。云厂商实时语音 API 是同一条 WebSocket
+  内 ASR/LLM/TTS 融合：partial 识别实时回流、合成音频分块下发、随时打断。
+  R6 会话层语义（幂等键、partial/final、kind+retryable）正是按该形态设计，
+  Oboe 采集帧（seq/timestampMs/gapBefore）的端到端延迟与丢包观测也只有
+  在流式形态下才有意义。
+- 并存方式：契约不变，装配层换实现。三段式上线的短期场景里，本模块的
+  [AudioSink] 仍可复用——TTS 音频分块回包交给 playback_queue 迟滞起播，
+  平滑合成端抖动；采集侧继续用任意录音实现。R8 联调优先验证流式链路，
+  三段式作为功能兜底并行存在。
+
 ## 7. 验证口径
 
 本目录改动必须跑的：`flutter analyze`、`flutter test`（R1/R3/R6 阶段），
