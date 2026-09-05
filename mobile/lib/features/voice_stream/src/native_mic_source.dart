@@ -22,7 +22,8 @@ import 'frame_slicer.dart';
 class NativeMicSource implements MicSource {
   /// @brief 构造采集源。
   ///
-  /// @param bindings 原生绑定；缺省 FFI 真实实现，测试注入假绑定。
+  /// @param bindings 原生绑定；缺省经绑定层平台工厂创建（原生 FFI 真实
+  ///        实现 / web 桩），测试注入假绑定。
   /// @param drainInterval 出口轮询周期；10ms ≈ 半个 20ms 帧，延迟与
   ///        唤醒次数的折中。
   /// @param capacityMs 环缓容量按毫秒预算（覆盖丢旧的缓冲上限）。
@@ -30,7 +31,7 @@ class NativeMicSource implements MicSource {
     VoiceInputBindings? bindings,
     this.drainInterval = const Duration(milliseconds: 10),
     this.capacityMs = 2000,
-  }) : _bindings = bindings ?? FfiVoiceInputBindings();
+  }) : _bindings = bindings ?? createDefaultInputBindings();
 
   final VoiceInputBindings _bindings;
   final Duration drainInterval;

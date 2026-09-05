@@ -30,7 +30,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 ROOT = REPO  # 可被 --root 覆盖，方便在临时目录里试
 
-START_DATE = dt.date(2026, 9, 2)  # D1 对应的日期
+START_DATE = dt.date(2026, 9, 1)  # D1 对应的日期（开课首日）
 TOTAL_DAYS = 6
 README_LIMIT = 800  # README 字数上限（不计空白字符）
 ASSET_WARN_KB = 300  # Gitee 对附件限制较严，超过就提醒压缩
