@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Practice Plan API
+  title: Practice Plan and Session API
   version: 1.0.0
 paths:
   /v1/practice-plans:
@@ -61,6 +61,95 @@ paths:
         '409':
           description: Invalid plan state transition
           content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+  /v1/practice-sessions:
+    post:
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreatePracticeSession'}
+      responses:
+        '201':
+          description: Created draft session with ordered question snapshots
+          content: {application/json: {schema: {$ref: '#/components/schemas/SessionResponse'}}}
+        '400':
+          description: Invalid request or invalid plan/scene snapshot
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '401':
+          description: Authentication required
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '404':
+          description: Plan not found or not owned by the authenticated user
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '409':
+          description: Plan is archived
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+  /v1/practice-sessions/{session_id}:
+    get:
+      security: [{bearerAuth: []}]
+      parameters: [{name: session_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: Session and its question snapshots; current_question is populated only when active
+          content: {application/json: {schema: {$ref: '#/components/schemas/SessionResponse'}}}
+        '401':
+          description: Authentication required
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '404':
+          description: Session not found or not owned by the authenticated user
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+  /v1/practice-sessions/{session_id}/current-question:
+    get:
+      security: [{bearerAuth: []}]
+      parameters: [{name: session_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: Current question of an active session
+          content: {application/json: {schema: {$ref: '#/components/schemas/QuestionResponse'}}}
+        '401':
+          description: Authentication required
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '404':
+          description: Session not found or not owned by the authenticated user
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '409':
+          description: Session is not active or has no current question
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+  /v1/practice-sessions/{session_id}/activation:
+    post:
+      security: [{bearerAuth: []}]
+      parameters: [{name: session_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: Activated session with its current question
+          content: {application/json: {schema: {$ref: '#/components/schemas/SessionResponse'}}}
+        '401':
+          description: Authentication required
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '404':
+          description: Session not found or not owned by the authenticated user
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '409':
+          description: Session is not in DRAFT state
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+  /v1/practice-sessions/{session_id}/complete:
+    post:
+      security: [{bearerAuth: []}]
+      parameters: [{name: session_id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200':
+          description: Completed session
+          content: {application/json: {schema: {$ref: '#/components/schemas/SessionResponse'}}}
+        '401':
+          description: Authentication required
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '404':
+          description: Session not found or not owned by the authenticated user
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+        '409':
+          description: Session is not in ACTIVE state
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -111,3 +200,46 @@ components:
           properties:
             code: {type: string}
             message: {type: string}
+    CreatePracticeSession:
+      type: object
+      required: [plan_id]
+      additionalProperties: false
+      properties:
+        plan_id: {type: string, format: uuid}
+    PracticeQuestion:
+      type: object
+      required: [id, session_id, position, content]
+      properties:
+        id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        position: {type: integer, minimum: 1}
+        content: {type: string}
+    PracticeSession:
+      type: object
+      required: [id, actor_id, plan_id, scene_id, scene_version, status, created_at, updated_at, questions, current_question]
+      properties:
+        id: {type: string, format: uuid}
+        actor_id: {type: string}
+        plan_id: {type: string, format: uuid}
+        scene_id: {type: string}
+        scene_version: {type: integer, minimum: 1}
+        status: {type: string, enum: [DRAFT, ACTIVE, COMPLETED]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        questions:
+          type: array
+          items: {$ref: '#/components/schemas/PracticeQuestion'}
+        current_question:
+          nullable: true
+          allOf:
+            - {$ref: '#/components/schemas/PracticeQuestion'}
+    SessionResponse:
+      type: object
+      required: [session]
+      properties:
+        session: {$ref: '#/components/schemas/PracticeSession'}
+    QuestionResponse:
+      type: object
+      required: [question]
+      properties:
+        question: {$ref: '#/components/schemas/PracticeQuestion'}

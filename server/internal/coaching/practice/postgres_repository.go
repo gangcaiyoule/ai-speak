@@ -89,3 +89,144 @@ func (r *PostgresPlanRepository) ArchivePlan(ctx context.Context, actorID, id st
 	}
 	return plan, nil
 }
+
+// PostgresSessionRepository 将会话和问题快照持久化到 PostgreSQL。
+type PostgresSessionRepository struct{ db *sql.DB }
+
+func NewPostgresSessionRepository(db *sql.DB) *PostgresSessionRepository {
+	return &PostgresSessionRepository{db: db}
+}
+
+type postgresSessionQueryer interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+const sessionColumns = `id,actor_id,plan_id,scene_id,scene_version,status,created_at,updated_at`
+
+func (r *PostgresSessionRepository) CreateSession(ctx context.Context, session Session, questions []Question) (Session, error) {
+	if err := contextError(ctx); err != nil {
+		return Session{}, err
+	}
+	if r == nil || r.db == nil {
+		return Session{}, ErrInvalidSession
+	}
+	if err := validateSessionSnapshot(session, questions); err != nil {
+		return Session{}, err
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Session{}, fmt.Errorf("begin practice session transaction: %w", err)
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, `INSERT INTO practice_sessions (id,actor_id,plan_id,scene_id,scene_version,status,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, session.ID, session.ActorID, session.PlanID, session.SceneID, session.SceneVersion, session.Status, session.CreatedAt, session.UpdatedAt)
+	if err != nil {
+		return Session{}, fmt.Errorf("insert practice session: %w", err)
+	}
+	for _, question := range questions {
+		_, err = tx.ExecContext(ctx, `INSERT INTO practice_questions (id,session_id,position,content) VALUES ($1,$2,$3,$4)`, question.ID, question.SessionID, question.Position, question.Content)
+		if err != nil {
+			return Session{}, fmt.Errorf("insert practice question: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return Session{}, fmt.Errorf("commit practice session: %w", err)
+	}
+	return withQuestions(session, questions), nil
+}
+
+func (r *PostgresSessionRepository) FindSession(ctx context.Context, actorID, sessionID string) (Session, error) {
+	if err := contextError(ctx); err != nil {
+		return Session{}, err
+	}
+	if r == nil || r.db == nil {
+		return Session{}, ErrSessionNotFound
+	}
+	session, err := findPostgresSession(ctx, r.db, actorID, sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	questions, err := listPostgresQuestions(ctx, r.db, actorID, sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	return withQuestions(session, questions), nil
+}
+
+func (r *PostgresSessionRepository) ActivateSession(ctx context.Context, actorID, sessionID string, now time.Time) (Session, error) {
+	return r.transitionSession(ctx, actorID, sessionID, SessionStatusDraft, SessionStatusActive, now)
+}
+
+func (r *PostgresSessionRepository) CompleteSession(ctx context.Context, actorID, sessionID string, now time.Time) (Session, error) {
+	return r.transitionSession(ctx, actorID, sessionID, SessionStatusActive, SessionStatusCompleted, now)
+}
+
+func (r *PostgresSessionRepository) transitionSession(ctx context.Context, actorID, sessionID, from, to string, now time.Time) (Session, error) {
+	if err := contextError(ctx); err != nil {
+		return Session{}, err
+	}
+	if r == nil || r.db == nil {
+		return Session{}, ErrSessionNotFound
+	}
+	query := `UPDATE practice_sessions SET status=$3,updated_at=$4 WHERE id=$1 AND actor_id=$2 AND status=$5 RETURNING ` + sessionColumns
+	session, err := scanPostgresSession(r.db.QueryRowContext(ctx, query, sessionID, actorID, to, now, from))
+	if errors.Is(err, sql.ErrNoRows) {
+		current, findErr := findPostgresSession(ctx, r.db, actorID, sessionID)
+		if errors.Is(findErr, ErrSessionNotFound) {
+			return Session{}, ErrSessionNotFound
+		}
+		if findErr != nil {
+			return Session{}, findErr
+		}
+		if current.Status != from {
+			return Session{}, ErrInvalidSessionTransition
+		}
+		return Session{}, ErrInvalidSessionTransition
+	}
+	if err != nil {
+		return Session{}, fmt.Errorf("transition practice session: %w", err)
+	}
+	questions, err := listPostgresQuestions(ctx, r.db, actorID, sessionID)
+	if err != nil {
+		return Session{}, err
+	}
+	return withQuestions(session, questions), nil
+}
+
+func findPostgresSession(ctx context.Context, q postgresSessionQueryer, actorID, sessionID string) (Session, error) {
+	query := `SELECT ` + sessionColumns + ` FROM practice_sessions WHERE id=$1 AND actor_id=$2`
+	session, err := scanPostgresSession(q.QueryRowContext(ctx, query, sessionID, actorID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Session{}, ErrSessionNotFound
+	}
+	if err != nil {
+		return Session{}, fmt.Errorf("find practice session: %w", err)
+	}
+	return session, nil
+}
+
+func scanPostgresSession(row *sql.Row) (Session, error) {
+	var session Session
+	err := row.Scan(&session.ID, &session.ActorID, &session.PlanID, &session.SceneID, &session.SceneVersion, &session.Status, &session.CreatedAt, &session.UpdatedAt)
+	return session, err
+}
+
+func listPostgresQuestions(ctx context.Context, q postgresSessionQueryer, actorID, sessionID string) ([]Question, error) {
+	rows, err := q.QueryContext(ctx, `SELECT q.id,q.session_id,q.position,q.content FROM practice_questions q JOIN practice_sessions s ON s.id=q.session_id WHERE q.session_id=$1 AND s.actor_id=$2 ORDER BY q.position ASC`, sessionID, actorID)
+	if err != nil {
+		return nil, fmt.Errorf("list practice questions: %w", err)
+	}
+	defer rows.Close()
+	questions := make([]Question, 0)
+	for rows.Next() {
+		var question Question
+		if err := rows.Scan(&question.ID, &question.SessionID, &question.Position, &question.Content); err != nil {
+			return nil, fmt.Errorf("scan practice question: %w", err)
+		}
+		questions = append(questions, question)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read practice questions: %w", err)
+	}
+	return questions, nil
+}
