@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 
+	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/evaluation"
 	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/practice"
 	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/scene"
 	"github.com/gangcaiyoule/ai-speak/server/internal/identity"
@@ -14,11 +17,14 @@ import (
 
 // HTTPHandler 通过 REST 传输层暴露场景、练习和评测接口。
 type HTTPHandler struct {
-	catalog  scene.CatalogReader
-	auth     identity.AuthService
-	plans    practice.PlanService
-	sessions practice.SessionService
+	catalog     scene.CatalogReader
+	auth        identity.AuthService
+	plans       practice.PlanService
+	sessions    practice.SessionService
+	evaluations evaluation.Repository
 }
+
+var evaluationIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
 // NewHTTPHandler 创建使用内存 Repository 的本地 HTTP 处理器。
 func NewHTTPHandler() *HTTPHandler {
@@ -41,6 +47,13 @@ func NewHTTPHandlerWithAllDependencies(auth identity.AuthService, plans practice
 	return &HTTPHandler{catalog: catalog, auth: auth, plans: plans, sessions: sessions}
 }
 
+// NewHTTPHandlerWithEvaluationRepository adds the report query repository to an existing handler.
+func NewHTTPHandlerWithEvaluationRepository(auth identity.AuthService, plans practice.PlanService, sessions practice.SessionService, catalog scene.CatalogReader, reports evaluation.Repository) *HTTPHandler {
+	h := NewHTTPHandlerWithAllDependencies(auth, plans, sessions, catalog)
+	h.evaluations = reports
+	return h
+}
+
 // RegisterRoutes 在指定路由器上注册口语训练接口。
 func (h *HTTPHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/scenes", h.listScenes)
@@ -57,8 +70,118 @@ func (h *HTTPHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/activate", h.activateSession)
 	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/text-answers", h.submitTextAnswer)
 	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/complete", h.completeSession)
-	mux.HandleFunc("GET /v1/practice-sessions/{session_id}/evaluation", h.notImplemented)
-	mux.HandleFunc("GET /v1/evaluation-reports/{report_id}", h.notImplemented)
+	mux.HandleFunc("GET /v1/practice-sessions/{session_id}/evaluation", h.getSessionEvaluation)
+	mux.HandleFunc("GET /v1/evaluation-reports/{report_id}", h.getEvaluationReport)
+	mux.HandleFunc("GET /v1/evaluation-reports", h.listEvaluationReports)
+}
+
+func (h *HTTPHandler) getSessionEvaluation(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	if !evaluationIDPattern.MatchString(r.PathValue("session_id")) {
+		h.writeEvaluationError(w, evaluation.ErrInvalidInput)
+		return
+	}
+	if h.evaluations == nil {
+		h.writeEvaluationError(w, errors.New("evaluation repository unavailable"))
+		return
+	}
+	report, err := h.evaluations.FindBySession(r.Context(), actor, r.PathValue("session_id"))
+	if err != nil {
+		h.writeEvaluationError(w, err)
+		return
+	}
+	if report.Status != evaluation.StatusReady {
+		h.writePrivateJSON(w, http.StatusConflict, map[string]any{"report": report, "error": map[string]string{"code": "evaluation_report_not_ready", "message": "evaluation_report_not_ready"}})
+		return
+	}
+	h.writePrivateJSON(w, http.StatusOK, map[string]any{"report": report})
+}
+
+func (h *HTTPHandler) getEvaluationReport(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	if h.evaluations == nil {
+		h.writeEvaluationError(w, errors.New("evaluation repository unavailable"))
+		return
+	}
+	if !evaluationIDPattern.MatchString(r.PathValue("report_id")) {
+		h.writeEvaluationError(w, evaluation.ErrInvalidInput)
+		return
+	}
+	report, err := h.evaluations.FindByID(r.Context(), actor, r.PathValue("report_id"))
+	if err != nil {
+		h.writeEvaluationError(w, err)
+		return
+	}
+	if report.Status != evaluation.StatusReady {
+		h.writePrivateJSON(w, http.StatusConflict, map[string]any{"report": report, "error": map[string]string{"code": "evaluation_report_not_ready", "message": "evaluation_report_not_ready"}})
+		return
+	}
+	h.writePrivateJSON(w, http.StatusOK, map[string]any{"report": report})
+}
+
+func (h *HTTPHandler) listEvaluationReports(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	if h.evaluations == nil {
+		h.writeEvaluationError(w, errors.New("evaluation repository unavailable"))
+		return
+	}
+	q := r.URL.Query()
+	limit := 20
+	if raw := q.Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 100 {
+			h.writeEvaluationError(w, evaluation.ErrInvalidInput)
+			return
+		}
+		limit = n
+	}
+	var cursor *evaluation.HistoryCursor
+	if raw := q.Get("cursor"); raw != "" {
+		c, err := evaluation.DecodeCursor(raw)
+		if err != nil {
+			h.writeEvaluationError(w, evaluation.ErrInvalidInput)
+			return
+		}
+		cursor = &c
+	}
+	if len(q.Get("search")) > 200 {
+		h.writeEvaluationError(w, evaluation.ErrInvalidInput)
+		return
+	}
+	page, err := h.evaluations.List(r.Context(), evaluation.HistoryFilter{ActorID: actor, Limit: limit, Cursor: cursor, Search: q.Get("search")})
+	if err != nil {
+		h.writeEvaluationError(w, err)
+		return
+	}
+	h.writePrivateJSON(w, http.StatusOK, page)
+}
+
+func (h *HTTPHandler) writeEvaluationError(w http.ResponseWriter, err error) {
+	status, code := http.StatusInternalServerError, "internal_error"
+	if errors.Is(err, evaluation.ErrInvalidInput) {
+		status, code = http.StatusBadRequest, "invalid_request"
+	}
+	if errors.Is(err, evaluation.ErrNotFound) {
+		status, code = http.StatusNotFound, "evaluation_report_not_found"
+	}
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+	}
+	h.writePrivateJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": code}})
+}
+
+func (h *HTTPHandler) writePrivateJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Cache-Control", "private, no-store")
+	writeJSON(w, status, value)
 }
 
 func (h *HTTPHandler) createPlan(w http.ResponseWriter, r *http.Request) {
