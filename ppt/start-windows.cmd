@@ -16,10 +16,12 @@ if errorlevel 1 (
 
 echo Starting SpeakUp Practice Edition...
 echo Open: http://127.0.0.1:18086/practice
+echo LAN:  http://10.252.63.24:18086/practice
 echo Press Ctrl+C to stop the server.
 echo.
 
 start "" powershell.exe -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://127.0.0.1:18086/practice'"
+set "HOST=0.0.0.0"
 node server.mjs
 
 if errorlevel 1 (
