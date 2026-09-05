@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 
+	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/evaluation"
 	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/practice"
 	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/scene"
 	"github.com/gangcaiyoule/ai-speak/server/internal/identity"
@@ -14,18 +17,41 @@ import (
 
 // HTTPHandler 通过 REST 传输层暴露场景、练习和评测接口。
 type HTTPHandler struct {
-	catalog scene.CatalogReader
-	auth    identity.AuthService
-	plans   practice.PlanService
+	catalog     scene.CatalogReader
+	auth        identity.AuthService
+	plans       practice.PlanService
+	sessions    practice.SessionService
+	evaluations evaluation.Repository
 }
 
-// NewHTTPHandler 创建口语训练模块的空 HTTP 处理器。
-func NewHTTPHandler() *HTTPHandler { return &HTTPHandler{catalog: scene.NewCatalog()} }
+var evaluationIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+
+// NewHTTPHandler 创建使用内存 Repository 的本地 HTTP 处理器。
+func NewHTTPHandler() *HTTPHandler {
+	catalog := scene.NewCatalog()
+	plans := practice.NewPlanService(practice.NewMemoryPlanRepository(), catalog)
+	sessions := practice.NewSessionService(practice.NewMemorySessionRepository(), plans, catalog)
+	return &HTTPHandler{catalog: catalog, plans: plans, sessions: sessions}
+}
 func NewHTTPHandlerWithDependencies(auth identity.AuthService, plans practice.PlanService, catalog scene.CatalogReader) *HTTPHandler {
 	if plans == nil || catalog == nil {
 		panic("coaching plan dependencies are required")
 	}
-	return &HTTPHandler{catalog: catalog, auth: auth, plans: plans}
+	return NewHTTPHandlerWithAllDependencies(auth, plans, practice.NewSessionService(practice.NewMemorySessionRepository(), plans, catalog), catalog)
+}
+
+func NewHTTPHandlerWithAllDependencies(auth identity.AuthService, plans practice.PlanService, sessions practice.SessionService, catalog scene.CatalogReader) *HTTPHandler {
+	if plans == nil || sessions == nil || catalog == nil {
+		panic("coaching dependencies are required")
+	}
+	return &HTTPHandler{catalog: catalog, auth: auth, plans: plans, sessions: sessions}
+}
+
+// NewHTTPHandlerWithEvaluationRepository adds the report query repository to an existing handler.
+func NewHTTPHandlerWithEvaluationRepository(auth identity.AuthService, plans practice.PlanService, sessions practice.SessionService, catalog scene.CatalogReader, reports evaluation.Repository) *HTTPHandler {
+	h := NewHTTPHandlerWithAllDependencies(auth, plans, sessions, catalog)
+	h.evaluations = reports
+	return h
 }
 
 // RegisterRoutes 在指定路由器上注册口语训练接口。
@@ -37,13 +63,125 @@ func (h *HTTPHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/practice-plans", h.listPlans)
 	mux.HandleFunc("GET /v1/practice-plans/{plan_id}", h.getPlan)
 	mux.HandleFunc("POST /v1/practice-plans/{plan_id}/archive", h.archivePlan)
-	mux.HandleFunc("POST /v1/practice-sessions", h.notImplemented)
-	mux.HandleFunc("GET /v1/practice-sessions/{session_id}", h.notImplemented)
-	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/activation", h.notImplemented)
-	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/text-answers", h.notImplemented)
-	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/complete", h.notImplemented)
-	mux.HandleFunc("GET /v1/practice-sessions/{session_id}/evaluation", h.notImplemented)
-	mux.HandleFunc("GET /v1/evaluation-reports/{report_id}", h.notImplemented)
+	mux.HandleFunc("POST /v1/practice-sessions", h.createSession)
+	mux.HandleFunc("GET /v1/practice-sessions/{session_id}", h.getSession)
+	mux.HandleFunc("GET /v1/practice-sessions/{session_id}/current-question", h.getCurrentQuestion)
+	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/activation", h.activateSession)
+	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/activate", h.activateSession)
+	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/text-answers", h.submitTextAnswer)
+	mux.HandleFunc("POST /v1/practice-sessions/{session_id}/complete", h.completeSession)
+	mux.HandleFunc("GET /v1/practice-sessions/{session_id}/evaluation", h.getSessionEvaluation)
+	mux.HandleFunc("GET /v1/evaluation-reports/{report_id}", h.getEvaluationReport)
+	mux.HandleFunc("GET /v1/evaluation-reports", h.listEvaluationReports)
+}
+
+func (h *HTTPHandler) getSessionEvaluation(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	if !evaluationIDPattern.MatchString(r.PathValue("session_id")) {
+		h.writeEvaluationError(w, evaluation.ErrInvalidInput)
+		return
+	}
+	if h.evaluations == nil {
+		h.writeEvaluationError(w, errors.New("evaluation repository unavailable"))
+		return
+	}
+	report, err := h.evaluations.FindBySession(r.Context(), actor, r.PathValue("session_id"))
+	if err != nil {
+		h.writeEvaluationError(w, err)
+		return
+	}
+	if report.Status != evaluation.StatusReady {
+		h.writePrivateJSON(w, http.StatusConflict, map[string]any{"report": report, "error": map[string]string{"code": "evaluation_report_not_ready", "message": "evaluation_report_not_ready"}})
+		return
+	}
+	h.writePrivateJSON(w, http.StatusOK, map[string]any{"report": report})
+}
+
+func (h *HTTPHandler) getEvaluationReport(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	if h.evaluations == nil {
+		h.writeEvaluationError(w, errors.New("evaluation repository unavailable"))
+		return
+	}
+	if !evaluationIDPattern.MatchString(r.PathValue("report_id")) {
+		h.writeEvaluationError(w, evaluation.ErrInvalidInput)
+		return
+	}
+	report, err := h.evaluations.FindByID(r.Context(), actor, r.PathValue("report_id"))
+	if err != nil {
+		h.writeEvaluationError(w, err)
+		return
+	}
+	if report.Status != evaluation.StatusReady {
+		h.writePrivateJSON(w, http.StatusConflict, map[string]any{"report": report, "error": map[string]string{"code": "evaluation_report_not_ready", "message": "evaluation_report_not_ready"}})
+		return
+	}
+	h.writePrivateJSON(w, http.StatusOK, map[string]any{"report": report})
+}
+
+func (h *HTTPHandler) listEvaluationReports(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	if h.evaluations == nil {
+		h.writeEvaluationError(w, errors.New("evaluation repository unavailable"))
+		return
+	}
+	q := r.URL.Query()
+	limit := 20
+	if raw := q.Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 100 {
+			h.writeEvaluationError(w, evaluation.ErrInvalidInput)
+			return
+		}
+		limit = n
+	}
+	var cursor *evaluation.HistoryCursor
+	if raw := q.Get("cursor"); raw != "" {
+		c, err := evaluation.DecodeCursor(raw)
+		if err != nil {
+			h.writeEvaluationError(w, evaluation.ErrInvalidInput)
+			return
+		}
+		cursor = &c
+	}
+	if len(q.Get("search")) > 200 {
+		h.writeEvaluationError(w, evaluation.ErrInvalidInput)
+		return
+	}
+	page, err := h.evaluations.List(r.Context(), evaluation.HistoryFilter{ActorID: actor, Limit: limit, Cursor: cursor, Search: q.Get("search")})
+	if err != nil {
+		h.writeEvaluationError(w, err)
+		return
+	}
+	h.writePrivateJSON(w, http.StatusOK, page)
+}
+
+func (h *HTTPHandler) writeEvaluationError(w http.ResponseWriter, err error) {
+	status, code := http.StatusInternalServerError, "internal_error"
+	if errors.Is(err, evaluation.ErrInvalidInput) {
+		status, code = http.StatusBadRequest, "invalid_request"
+	}
+	if errors.Is(err, evaluation.ErrNotFound) {
+		status, code = http.StatusNotFound, "evaluation_report_not_found"
+	}
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+	}
+	h.writePrivateJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": code}})
+}
+
+func (h *HTTPHandler) writePrivateJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Cache-Control", "private, no-store")
+	writeJSON(w, status, value)
 }
 
 func (h *HTTPHandler) createPlan(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +236,97 @@ func (h *HTTPHandler) archivePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"plan": plan})
 }
+
+func (h *HTTPHandler) createSession(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	var in practice.CreateSessionInput
+	if !decodeCoachingJSON(w, r, &in) {
+		return
+	}
+	session, err := h.sessions.CreateSession(r.Context(), actorID, in)
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"session": session})
+}
+
+func (h *HTTPHandler) getSession(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	session, err := h.sessions.GetSession(r.Context(), actorID, r.PathValue("session_id"))
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"session": session})
+}
+
+func (h *HTTPHandler) getCurrentQuestion(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	question, err := h.sessions.GetCurrentQuestion(r.Context(), actorID, r.PathValue("session_id"))
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"question": question})
+}
+
+func (h *HTTPHandler) activateSession(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	session, err := h.sessions.ActivateSession(r.Context(), actorID, r.PathValue("session_id"))
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"session": session})
+}
+
+func (h *HTTPHandler) submitTextAnswer(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	var in practice.SubmitTextAnswerInput
+	if !decodeCoachingJSON(w, r, &in) {
+		return
+	}
+	turn, err := h.sessions.SubmitTextAnswer(r.Context(), actorID, r.PathValue("session_id"), in)
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	session, err := h.sessions.GetSession(r.Context(), actorID, r.PathValue("session_id"))
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"turn": turn, "session": session})
+}
+
+func (h *HTTPHandler) completeSession(w http.ResponseWriter, r *http.Request) {
+	actorID, ok := h.actorID(w, r)
+	if !ok {
+		return
+	}
+	session, err := h.sessions.CompleteSession(r.Context(), actorID, r.PathValue("session_id"))
+	if err != nil {
+		h.writePracticeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"session": session})
+}
 func (h *HTTPHandler) actorID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	if h.auth == nil {
 		h.writePlanError(w, identity.ErrUnauthorized)
@@ -117,6 +346,14 @@ func (h *HTTPHandler) actorID(w http.ResponseWriter, r *http.Request) (string, b
 }
 
 func (h *HTTPHandler) writePlanError(w http.ResponseWriter, err error) {
+	h.writeCoachingError(w, err)
+}
+
+func (h *HTTPHandler) writePracticeError(w http.ResponseWriter, err error) {
+	h.writeCoachingError(w, err)
+}
+
+func (h *HTTPHandler) writeCoachingError(w http.ResponseWriter, err error) {
 	status, code := http.StatusInternalServerError, "internal_error"
 	switch {
 	case errors.Is(err, identity.ErrUnauthorized):
@@ -127,6 +364,24 @@ func (h *HTTPHandler) writePlanError(w http.ResponseWriter, err error) {
 		status, code = http.StatusNotFound, "practice_plan_not_found"
 	case errors.Is(err, practice.ErrPlanArchived):
 		status, code = http.StatusConflict, "practice_plan_archived"
+	case errors.Is(err, practice.ErrInvalidSession):
+		status, code = http.StatusBadRequest, "invalid_request"
+	case errors.Is(err, practice.ErrSessionNotFound):
+		status, code = http.StatusNotFound, "practice_session_not_found"
+	case errors.Is(err, practice.ErrSessionNotActive):
+		status, code = http.StatusConflict, "practice_session_not_active"
+	case errors.Is(err, practice.ErrInvalidSessionTransition):
+		status, code = http.StatusConflict, "invalid_state_transition"
+	case errors.Is(err, practice.ErrNoCurrentQuestion):
+		status, code = http.StatusConflict, "practice_question_not_available"
+	case errors.Is(err, practice.ErrInvalidAnswer):
+		status, code = http.StatusBadRequest, "invalid_answer"
+	case errors.Is(err, practice.ErrQuestionNotCurrent):
+		status, code = http.StatusConflict, "question_not_current"
+	case errors.Is(err, practice.ErrAnswerAlreadySubmitted):
+		status, code = http.StatusConflict, "answer_already_submitted"
+	case errors.Is(err, practice.ErrSessionHasPendingQuestion):
+		status, code = http.StatusConflict, "practice_session_has_pending_questions"
 	}
 	if status == http.StatusUnauthorized {
 		w.Header().Set("WWW-Authenticate", "Bearer")

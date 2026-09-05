@@ -10,6 +10,8 @@ import (
 
 	"github.com/gangcaiyoule/ai-speak/server/internal/agent"
 	"github.com/gangcaiyoule/ai-speak/server/internal/coaching"
+	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/evaluation"
+	evaluationpostgres "github.com/gangcaiyoule/ai-speak/server/internal/coaching/evaluation/postgres"
 	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/practice"
 	"github.com/gangcaiyoule/ai-speak/server/internal/coaching/scene"
 	"github.com/gangcaiyoule/ai-speak/server/internal/identity"
@@ -38,13 +40,23 @@ func buildRouterWithRepository(repository identity.Repository) http.Handler {
 }
 
 func buildRouterWithRepositories(repository identity.Repository, planRepository practice.PlanRepository) http.Handler {
+	return buildRouterWithAllRepositories(repository, planRepository, practice.NewMemorySessionRepository())
+}
+
+func buildRouterWithAllRepositories(repository identity.Repository, planRepository practice.PlanRepository, sessionRepository practice.SessionRepository) http.Handler {
+	return buildRouterWithEvaluationRepository(repository, planRepository, sessionRepository, nil)
+}
+
+func buildRouterWithEvaluationRepository(repository identity.Repository, planRepository practice.PlanRepository, sessionRepository practice.SessionRepository, evaluationRepository evaluation.Repository) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	auth := identity.NewService(repository)
 	identity.NewHTTPHandler(auth).RegisterRoutes(mux)
 	agent.NewHTTPHandler(agent.StubService{}).RegisterRoutes(mux)
 	catalog := scene.NewCatalog()
-	coaching.NewHTTPHandlerWithDependencies(auth, practice.NewPlanService(planRepository, catalog), catalog).RegisterRoutes(mux)
+	plans := practice.NewPlanService(planRepository, catalog)
+	sessions := practice.NewSessionService(sessionRepository, plans, catalog)
+	coaching.NewHTTPHandlerWithEvaluationRepository(auth, plans, sessions, catalog, evaluationRepository).RegisterRoutes(mux)
 	mux.Handle("GET /ws/voice/echo", voiceecho.NewWSSHandler())
 	return mux
 }
@@ -61,6 +73,8 @@ func main() {
 	}
 	var repository identity.Repository = identity.NewMemoryRepository()
 	var planRepository practice.PlanRepository = practice.NewMemoryPlanRepository()
+	var sessionRepository practice.SessionRepository = practice.NewMemorySessionRepository()
+	var evaluationRepository evaluation.Repository
 	var db *sql.DB
 	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
 		var err error
@@ -74,10 +88,12 @@ func main() {
 		defer db.Close()
 		repository = identity.NewPostgresRepository(db)
 		planRepository = practice.NewPostgresPlanRepository(db)
+		sessionRepository = practice.NewPostgresSessionRepository(db)
+		evaluationRepository = evaluationpostgres.New(db)
 	}
 	address := host + ":" + port
 	log.Printf("ai-speak server listening on %s", address)
-	if err := http.ListenAndServe(address, buildRouterWithRepositories(repository, planRepository)); err != nil {
+	if err := http.ListenAndServe(address, buildRouterWithEvaluationRepository(repository, planRepository, sessionRepository, evaluationRepository)); err != nil {
 		log.Fatal(err)
 	}
 }
