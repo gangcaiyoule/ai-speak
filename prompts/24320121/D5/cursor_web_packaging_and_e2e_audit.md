@@ -48,14 +48,7 @@ _Exported on 2026/9/5 at GMT+8 16:30 from Cursor (dev/voice_stream)_
 5. 部署形态缺失：compose.yaml 只有 postgres 没有 server；不带 DATABASE_URL 时内存库重启即丢数据（实测：重启后原账号登录 401）。
 6. 移动端 preparation_controller_test 两个用例红（既有，假实现不经网络路径）。
 
-压力点（按 git 提交归属）：
-- SiCheng Zhang（接口与 identity Postgres 作者）：practice-sessions HTTP 域接线，接口 58c2aed 已定义、域和端口在，只差把 notImplemented 换成真实现，是当前最大单点阻塞。
-- QiuZhiyu（evaluation 域与仓库作者）：补一个真实 Scorer（先接最简 LLM 文本评测即可），并把 evaluation 仓库接进 main.go 装配——评测在服务器上目前是装饰品。
-- yejunbo（coaching 移动端作者）：onStartSession 装配 + PracticeClient/EvaluationClient 的 Wire 实现（目前只有接口），顺手修两个红测试。
-- 仓库管理员（19730539862）：compose 补 server 服务、定 DATABASE_URL 部署形态。
-- 本人（voice_stream）：R8 端到端联调、浏览器与真机实测，但前提是上面 1–3 有东西可接。
-
-一句话总结：服务端单测全绿、真实旅程三步断——计划建好了，开始按钮按下去是空气，AI 对话和评测是 501 装饰品；建议把「practice-sessions 接线 + 真实 Scorer」立为最高优先级，它们是移动端所有断点的下游。
+缺口的责任归属与优先级分配口头同步，不写入文字记录。优先级建议：「practice-sessions 接线 + 真实 Scorer 实现」为最高优先级——它们是移动端所有断点的下游。
 
 ---
 
