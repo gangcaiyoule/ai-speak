@@ -161,8 +161,8 @@ C 层用各端单元测试入口回归；真机项（R4/R5/R7/R8）以实测延�
   3.47.2 stable / Dart 3.13.2）：
   - `flutter analyze`：0 error / 0 warning（余 5 条 info 为 coaching
     preparation 既有提示，与本模块无关）。
-  - `flutter test`（VM）：72 通过，2 失败（`coaching/preparation` 既有
-    状态机用例，纯假实现、不涉及本模块与本次改动路径，另立任务处理）。
+  - `flutter test`（VM）：72 通过，2 失败（与本模块无关的既有用例，不涉及
+    本模块与本次改动路径，另立任务处理，细节口头同步）。
   - `flutter build web`：通过；web 编译图覆盖 `mic_source_factory` web
     分支、`WebMicSource`、`pcm_convert` 与插件绑定层 web 桩全链路。
   - 浏览器内 getUserMedia 实测（Windows 宿主麦克风）：待人工执行——

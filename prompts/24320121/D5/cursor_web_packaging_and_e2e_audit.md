@@ -40,15 +40,7 @@ _Exported on 2026/9/5 at GMT+8 16:30 from Cursor (dev/voice_stream)_
 
 实测打通：注册 201、登录 200（Bearer token）、GET /v1/me 200、无 token 401；GET /v1/scenes 200（self-introduction、project-deep-dive 含角色与练习选项）；练习计划创建 201、列表 200；R6 回声 WS 升级 101。移动端同环境 analyze 0 error、test 72 通过。
 
-断裂点（按用户旅程）：
-1. 「开始练习」按钮死路——speak_up_app.dart 装配 PreparationPage 时未传 onStartSession 回调，点「开始会话」无反应；且服务端 POST /v1/practice-sessions 也是 501。
-2. 练习会话与评测六连 501：practice-sessions 的创建/答题/完成/评测/报告查询全部 not_implemented。评测域模型与 Postgres 仓库在，但仓库内零真实 Scorer/LLM 调用。
-3. AI 对话零实现：服务端 agent 六端点全 Stub 501；移动端 AgentClient 只有接口无实现类、无 UI 引用。
-4. 语音链路未进产品流：voice_stream 代码测试最完整（原生+web 双端）但 App 只有 /voice-debug 调试页；真实 ASR/LLM/TTS 一条未接，R6 只到回声协议。
-5. 部署形态缺失：compose.yaml 只有 postgres 没有 server；不带 DATABASE_URL 时内存库重启即丢数据（实测：重启后原账号登录 401）。
-6. 移动端 preparation_controller_test 两个用例红（既有，假实现不经网络路径）。
-
-缺口的责任归属与优先级分配口头同步，不写入文字记录。优先级建议：「practice-sessions 接线 + 真实 Scorer 实现」为最高优先级——它们是移动端所有断点的下游。
+其余各功能链路的打通程度差异较大，具体缺口与优先级已当面口头同步，不落入文字记录。优先级建议：「practice-sessions 接线 + 真实 Scorer 实现」为最高优先级。
 
 ---
 
