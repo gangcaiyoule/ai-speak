@@ -63,6 +63,15 @@ func TestSessionServiceEnforcesDraftActiveCompletedLifecycleAndCurrentQuestion(t
 	if _, err := service.ActivateSession(context.Background(), plan.ActorID, session.ID); !errors.Is(err, ErrInvalidSessionTransition) {
 		t.Fatalf("activate active error = %v, want ErrInvalidSessionTransition", err)
 	}
+	for i := 0; i < len(active.Questions); i++ {
+		current, err := service.GetCurrentQuestion(context.Background(), plan.ActorID, session.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.SubmitTextAnswer(context.Background(), plan.ActorID, session.ID, SubmitTextAnswerInput{QuestionID: current.ID, Content: " answer "}); err != nil {
+			t.Fatalf("SubmitTextAnswer() error = %v", err)
+		}
+	}
 
 	completed, err := service.CompleteSession(context.Background(), plan.ActorID, session.ID)
 	if err != nil {
@@ -86,6 +95,71 @@ func TestSessionServiceRejectsArchivedPlan(t *testing.T) {
 	}
 	if _, err := service.CreateSession(context.Background(), plan.ActorID, CreateSessionInput{PlanID: plan.ID}); !errors.Is(err, ErrPlanArchived) {
 		t.Fatalf("CreateSession() archived plan error = %v, want ErrPlanArchived", err)
+	}
+}
+
+func TestSessionServiceSubmitsAnswersAdvancesQuestionsAndRejectsInvalidOperations(t *testing.T) {
+	service, _, plan := newSessionTestService(t)
+	session, err := service.CreateSession(context.Background(), plan.ActorID, CreateSessionInput{PlanID: plan.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SubmitTextAnswer(context.Background(), plan.ActorID, session.ID, SubmitTextAnswerInput{QuestionID: session.Questions[0].ID, Content: "answer"}); !errors.Is(err, ErrSessionNotActive) {
+		t.Fatalf("draft answer error = %v", err)
+	}
+	active, err := service.ActivateSession(context.Background(), plan.ActorID, session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SubmitTextAnswer(context.Background(), plan.ActorID, session.ID, SubmitTextAnswerInput{QuestionID: active.Questions[1].ID, Content: "answer"}); !errors.Is(err, ErrQuestionNotCurrent) {
+		t.Fatalf("non-current answer error = %v", err)
+	}
+	if _, err := service.SubmitTextAnswer(context.Background(), "another-user", session.ID, SubmitTextAnswerInput{QuestionID: active.Questions[0].ID, Content: "answer"}); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("cross-user answer error = %v", err)
+	}
+	if _, err := service.SubmitTextAnswer(context.Background(), plan.ActorID, session.ID, SubmitTextAnswerInput{QuestionID: active.Questions[0].ID, Content: "   "}); !errors.Is(err, ErrInvalidAnswer) {
+		t.Fatalf("blank answer error = %v", err)
+	}
+	for i := 0; i < len(active.Questions); i++ {
+		current, err := service.GetCurrentQuestion(context.Background(), plan.ActorID, session.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.SubmitTextAnswer(context.Background(), plan.ActorID, session.ID, SubmitTextAnswerInput{QuestionID: current.ID, Content: "answer"}); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			if _, err := service.SubmitTextAnswer(context.Background(), plan.ActorID, session.ID, SubmitTextAnswerInput{QuestionID: current.ID, Content: "again"}); !errors.Is(err, ErrAnswerAlreadySubmitted) {
+				t.Fatalf("duplicate answer error = %v", err)
+			}
+		}
+	}
+	if _, err := service.GetCurrentQuestion(context.Background(), plan.ActorID, session.ID); !errors.Is(err, ErrNoCurrentQuestion) {
+		t.Fatalf("after final answer current error = %v", err)
+	}
+	completed, err := service.CompleteSession(context.Background(), plan.ActorID, session.ID)
+	if err != nil || completed.Status != SessionStatusCompleted || completed.CurrentQuestionID != nil {
+		t.Fatalf("completed session = %#v, %v", completed, err)
+	}
+	if _, err := service.SubmitTextAnswer(context.Background(), plan.ActorID, session.ID, SubmitTextAnswerInput{QuestionID: active.Questions[2].ID, Content: "again"}); !errors.Is(err, ErrSessionNotActive) {
+		t.Fatalf("completed answer error = %v", err)
+	}
+	if _, err := service.CompleteSession(context.Background(), plan.ActorID, session.ID); !errors.Is(err, ErrInvalidSessionTransition) {
+		t.Fatalf("duplicate completion error = %v", err)
+	}
+}
+
+func TestSessionServiceRequiresAllQuestionsBeforeCompletion(t *testing.T) {
+	service, _, plan := newSessionTestService(t)
+	session, err := service.CreateSession(context.Background(), plan.ActorID, CreateSessionInput{PlanID: plan.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ActivateSession(context.Background(), plan.ActorID, session.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.CompleteSession(context.Background(), plan.ActorID, session.ID); !errors.Is(err, ErrSessionHasPendingQuestion) {
+		t.Fatalf("pending completion error = %v", err)
 	}
 }
 
