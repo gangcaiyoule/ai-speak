@@ -58,7 +58,23 @@ func buildRouterWithEvaluationRepository(repository identity.Repository, planRep
 	sessions := practice.NewSessionService(sessionRepository, plans, catalog)
 	coaching.NewHTTPHandlerWithEvaluationRepository(auth, plans, sessions, catalog, evaluationRepository).RegisterRoutes(mux)
 	mux.Handle("GET /ws/voice/echo", voiceecho.NewWSSHandler())
+	serveStaticWeb(mux)
 	return mux
+}
+
+// serveStaticWeb serves the Flutter web bundle from WEB_DIR (default "web")
+// when the directory exists, so the page and the API can be deployed
+// same-origin. Registration order is irrelevant: Go 1.22 ServeMux routes by
+// most-specific pattern, and "GET /" does not shadow "POST /v1/..." routes.
+func serveStaticWeb(mux *http.ServeMux) {
+	dir := os.Getenv("WEB_DIR")
+	if dir == "" {
+		dir = "web"
+	}
+	if entries, err := os.ReadDir(dir); err != nil || len(entries) == 0 {
+		return
+	}
+	mux.Handle("GET /", http.FileServer(http.Dir(dir)))
 }
 
 // main starts the HTTP server on SERVER_HOST:SERVER_PORT.
