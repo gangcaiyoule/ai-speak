@@ -13,10 +13,19 @@ UI（字幕、波形）不在本目录范围内，只预留数据出口。
 | 采集/播放/缓冲 | C（Android 侧 C++，因 Oboe） | 一份实现两端编：NDK 编进 Android，Xcode 直接编进 iOS |
 | iOS 会话激活 | Objective-C++ 壳（约 20 行） | `AVAudioSession` 激活是 iOS 规定动作，AudioUnit 本身是 C API |
 | Dart 侧 | `dart:ffi` 控制面 + 数据出口 | 只拿指针、调开关，不做数据搬运 |
+| web 采集 | Dart（`package:web`，getUserMedia + AudioWorklet） | web 无 dart:ffi 与原生库；浏览器麦克风走 getUserMedia，C 层不参与 |
 | 服务端 | Go（仓库既有） | 复用现有骨架 |
 
 明确不写：Kotlin/Swift 业务逻辑。Android 采集走 Oboe（AAudio 路径），
 不走 Java `AudioRecord`。
+
+平台装配走条件导入（web 打包可编译、原生行为不变）：插件绑定层
+`bindings.dart`（原生 FFI ↔ web 桩）与模块平台工厂
+`src/mic_source_factory.dart`（[NativeMicSource] ↔ [WebMicSource]）。
+web 侧的 Float32→I16 转换在 `src/pcm_convert.dart`（纯函数可单测）。
+App 装配层注册了调试路由 `/voice-debug`（`voice_debug_page.dart`）：
+经工厂取当前平台 [MicSource]，web 打包后在浏览器授权麦克风即可实测
+宿主系统麦克风（Windows 上为 Chrome/Edge 授权的系统默认麦克风）。
 
 ## 2. 共享环形缓冲（核心抽象，先行实现）
 
@@ -116,12 +125,50 @@ partial/final 区分、kind+retryable 失败模型），但只定义抽象，不
   真实云服务接入另行推进
 - R7 ◐ AudioSink 播放路径已落地（`NativeAudioSink` + Oboe 输出流 + RemoteIO 渲染回调 + `playback_queue` 欠载状态机）；真机实测待 R8
 - R8 端到端联调：弱网（丢包/延迟注入）下验证传输方案选型与缓冲预算
+- web ✅ 打包支持落地：`mobile/web` 脚手架启用，`flutter build web` 编译图
+  含采集链路 web 分支（getUserMedia + AudioWorklet）；`/voice-debug` 路由
+  供浏览器实测；App 装配层 HTTP 客户端已改为平台无关实现（package:http）
+
+### 6.1 与三段式语音链路（其他成员实现）的关系
+
+其他成员的语音功能走三段式：整段录音 → speech2text → 大模型 → text2speech
+→ 整段播放，全程以文本/音频文件为载体，不产生流式音频。取舍如下：
+
+- 三段式的代价：录音、STT、LLM、TTS 四段串行，首音延迟是各段之和；
+  播放中无法打断重说；也没有弱网丢帧语义（整段上传成败二元）。
+  在这个形态里，Oboe 流式采集与 playback_queue 确实用不上——任意录音
+  插件加媒体播放器即可完成，本模块对该形态是超配。
+- 本模块的定位：瞄准流式升级路径。云厂商实时语音 API 是同一条 WebSocket
+  内 ASR/LLM/TTS 融合：partial 识别实时回流、合成音频分块下发、随时打断。
+  R6 会话层语义（幂等键、partial/final、kind+retryable）正是按该形态设计，
+  Oboe 采集帧（seq/timestampMs/gapBefore）的端到端延迟与丢包观测也只有
+  在流式形态下才有意义。
+- 并存方式：契约不变，装配层换实现。三段式上线的短期场景里，本模块的
+  [AudioSink] 仍可复用——TTS 音频分块回包交给 playback_queue 迟滞起播，
+  平滑合成端抖动；采集侧继续用任意录音实现。R8 联调优先验证流式链路，
+  三段式作为功能兜底并行存在。
 
 ## 7. 验证口径
 
 本目录改动必须跑的：`flutter analyze`、`flutter test`（R1/R3/R6 阶段），
 C 层用各端单元测试入口回归；真机项（R4/R5/R7/R8）以实测延迟/丢包数字为准。
 本机当前没有 Flutter SDK 时，验证由有环境的机器执行，不在记录里写没跑过的结果。
+
+### 7.1 验证记录
+
+- 2026-09-05 web 打包支持，环境：GitHub Codespace
+  `musical-invention-p49pw6j5g5jcrwvp`（`/workspaces/ai-speak`，Flutter
+  3.47.2 stable / Dart 3.13.2）：
+  - `flutter analyze`：0 error / 0 warning（余 5 条 info 为 coaching
+    preparation 既有提示，与本模块无关）。
+  - `flutter test`（VM）：72 通过，2 失败（与本模块无关的既有用例，不涉及
+    本模块与本次改动路径，另立任务处理，细节口头同步）。
+  - `flutter build web`：通过；web 编译图覆盖 `mic_source_factory` web
+    分支、`WebMicSource`、`pcm_convert` 与插件绑定层 web 桩全链路。
+  - 浏览器内 getUserMedia 实测（Windows 宿主麦克风）：待人工执行——
+    `flutter run -d web-server` 后经 Codespace 端口转发在 Windows 浏览器
+    打开 `/voice-debug` 授权麦克风；浏览器运行时用例（`--platform
+    chrome`）因容器无浏览器暂未跑。
 
 ## 8. 编码约定
 

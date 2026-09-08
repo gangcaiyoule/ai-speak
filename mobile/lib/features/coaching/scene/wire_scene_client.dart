@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+
+import 'package:http/http.dart' as http;
 
 import 'scene.dart';
 import 'scene_client.dart';
@@ -23,7 +24,7 @@ final class WireSceneClient implements SceneClient {
     SceneWireTransport? transport,
     Duration requestTimeout = const Duration(seconds: 15),
   })  : _baseUri = baseUri,
-        _transport = transport ?? _IoSceneWireTransport(),
+        _transport = transport ?? _HttpSceneWireTransport(),
         _requestTimeout = requestTimeout {
     if (requestTimeout <= Duration.zero) {
       throw ArgumentError.value(requestTimeout, 'requestTimeout');
@@ -72,18 +73,18 @@ final class WireSceneClient implements SceneClient {
           .timeout(_requestTimeout);
     } on TimeoutException catch (error) {
       throw SceneClientException(kind: SceneClientFailureKind.network, message: error.toString());
-    } on SocketException catch (error) {
-      throw SceneClientException(kind: SceneClientFailureKind.network, message: error.toString());
-    } on IOException catch (error) {
+    } on Exception catch (error) {
+      // 网络层异常（原生平台为 SocketException/IOException，web 平台为
+      // http.ClientException），统一归为 network 类失败。
       throw SceneClientException(kind: SceneClientFailureKind.network, message: error.toString());
     }
-    if (response.statusCode == HttpStatus.notFound || response.statusCode >= 500) {
+    if (response.statusCode == 404 || response.statusCode >= 500) {
       throw SceneClientException(
         kind: SceneClientFailureKind.unavailable,
         statusCode: response.statusCode,
       );
     }
-    if (response.statusCode != HttpStatus.ok) throw _invalidResponse();
+    if (response.statusCode != 200) throw _invalidResponse();
     try {
       final decoded = jsonDecode(response.body);
       if (decoded is! Map) throw const SceneWireFormatException();
@@ -110,14 +111,12 @@ SceneDefinition _decodeScene(Object? value) {
 SceneClientException _invalidResponse() =>
     const SceneClientException(kind: SceneClientFailureKind.invalidResponse);
 
-final class _IoSceneWireTransport implements SceneWireTransport {
-  final HttpClient _client = HttpClient();
+final class _HttpSceneWireTransport implements SceneWireTransport {
+  final http.Client _client = http.Client();
 
   @override
   Future<SceneWireResponse> get(Uri uri) async {
-    final request = await _client.getUrl(uri);
-    request.followRedirects = false;
-    final response = await request.close();
-    return SceneWireResponse(response.statusCode, await utf8.decoder.bind(response).join());
+    final response = await _client.get(uri);
+    return SceneWireResponse(response.statusCode, response.body);
   }
 }

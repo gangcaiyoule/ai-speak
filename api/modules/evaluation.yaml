@@ -1,0 +1,38 @@
+openapi: 3.0.3
+info:
+  title: Evaluation Report Query API
+  version: 1.0.0
+paths:
+  /v1/practice-sessions/{session_id}/evaluation:
+    get:
+      security: [{bearerAuth: []}]
+      parameters: [{name: session_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Evaluation report}
+        '401': {description: Authentication required}
+        '404': {description: Report not found}
+        '409': {description: Report is not ready}
+  /v1/evaluation-reports/{report_id}:
+    get:
+      security: [{bearerAuth: []}]
+      parameters: [{name: report_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Evaluation report}
+        '400': {description: Invalid report id}
+        '401': {description: Authentication required}
+        '404': {description: Report not found}
+        '409': {description: Report is not ready}
+  /v1/evaluation-reports:
+    get:
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: search, in: query, schema: {type: string, maxLength: 200}}
+      responses:
+        '200': {description: Report history page}
+        '400': {description: Invalid query}
+        '401': {description: Authentication required}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}

@@ -3,7 +3,7 @@
 - 模块路径：`mobile/lib/features/voice_stream/`
 - 文档位置：`mobile/lib/features/voice_stream/docs/interfaces.md`（2026-09-03 由
   `docs/24320106/voice-stream-interfaces.md` 迁入，接口规格随模块一起维护）
-- 状态：v0.4（R7：AudioSink 播放路径、欠载状态机与丢帧统计已落地）
+- 状态：v0.4（R7：AudioSink 播放路径、欠载状态机与丢帧统计已落地；平台装配：原生 ↔ web 条件导入）
 - 范围：读（采集）、传（上行/回包）、放（播放）三条数据通路的抽象；
   UI（字幕/波形）不在本文档范围内，只通过事件流消费数据。
 
@@ -27,6 +27,22 @@ AudioSink ←── AudioFrame                    （播放）
 | 共享环形缓冲 | `src/ring_buffer.dart` |
 | 切帧器与帧头编解码 | `src/frame_slicer.dart` |
 | 会话层契约与生命周期状态机 | `src/session.dart` |
+| 平台工厂（原生 ↔ web 条件装配） | `src/mic_source_factory.dart` |
+
+### 2.x 平台实现与 web 装配（v0.4 新增）
+
+`MicSource` 的平台实现经条件导出装配，UI/控制器只依赖工厂：
+
+- **原生**（`dart.library.io`）：`src/native_mic_source.dart`——Oboe/
+  RemoteIO 经 dart:ffi；插件绑定层 `plugins/voice_input/lib/src/bindings.dart`
+  同样按条件导出（原生 FFI ↔ web 桩，web 上 dart:ffi 不存在）。
+- **web**（`dart.library.js_interop`）：`src/web_mic_source.dart`——
+  `getUserMedia`（约束：请求采样率、单声道、回声消除/降噪/AGC）+
+  AudioWorklet（每 128 样本回调，Blob URL 注入处理器）；Float32 归一化
+  样本经 `src/pcm_convert.dart` 转 16 位小端 PCM 后接切帧器。采样率同样
+  是请求不是保证：回读 `AudioContext.sampleRate` 用于切帧。
+- 误用兜底：web 上调用插件绑定会抛 `UnsupportedError`（明确报错而非
+  编译失败）；工厂兜底桩同理。
 | 采集端平台实现 | `src/native_mic_source.dart` |
 | 播放端平台实现与欠载状态机 | `src/native_audio_sink.dart` / `native/playback_queue.h` |
 
