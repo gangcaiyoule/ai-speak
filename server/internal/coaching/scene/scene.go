@@ -153,7 +153,16 @@ func contextError(ctx context.Context) error {
 func cloneScene(source Scene) Scene {
 	result := source
 	result.Prompt.FocusAreas = append([]string(nil), source.Prompt.FocusAreas...)
+	result.Prompt.TurnBlueprints = append([]string(nil), source.Prompt.TurnBlueprints...)
 	result.Roles = append([]RoleDefinition(nil), source.Roles...)
+	for i := range result.Roles {
+		result.Roles[i].PracticeObjectives = append([]PracticeObjective(nil), source.Roles[i].PracticeObjectives...)
+	}
 	result.PracticeOptions = append([]PracticeOption(nil), source.PracticeOptions...)
+	for i := range result.PracticeOptions {
+		if id := source.PracticeOptions[i].RoleDefinitionID; id != nil {
+			result.PracticeOptions[i].RoleDefinitionID = stringPtr(*id)
+		}
+	}
 	return result
 }
